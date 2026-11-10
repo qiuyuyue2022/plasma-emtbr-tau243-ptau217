@@ -1,14 +1,14 @@
 # Plasma eMTBR-tau243 immunoassay versus p-tau217
 
-Analysis code accompanying the manuscript **“A plasma eMTBR-tau243 immunoassay versus p-tau217 for tau status in a memory clinic.”**
+Analysis code accompanying the manuscript **“Plasma eMTBR-tau243 measured by immunoassay discriminates tau PET status but rises with amyloid before tau PET positivity.”**
 
 ## Study overview
 
-This cross-sectional study examined plasma biomarkers in 135 participants: 101 memory-clinic patients and 34 healthy controls. Its primary comparison was the ability of immunoassay-measured eMTBR-tau243 and p-tau217 to discriminate tau PET-defined T status, including within amyloid-positive participants. The analyses also examined amyloid (A) status and explored the distribution of eMTBR-tau243 among amyloid-positive, tau-negative (A+T−) participants.
+This cross-sectional diagnostic-accuracy study measured eMTBR-tau243 (research-use-only assay) and six other plasma biomarkers by single-molecule immunoassay in 135 participants of the PUMCH Dementia Cohort: 101 memory-clinic patients and 34 healthy controls. The primary comparison was the ability of eMTBR-tau243 and p-tau217 to discriminate tau PET-defined T status, overall (n=68) and within amyloid-positive participants (n=52). Secondary analyses examined amyloid (A) status, marker changes from A−T− to A+T− (amyloid step) and from A+T− to A+T+ (tau step) in tau PET-defined groups (n=16, 18 and 34), and the distribution of eMTBR-tau243 within the 18 tau PET-defined A+T− participants.
 
-The two markers had similar observed AUCs for the main comparisons, with no statistically significant paired differences detected. Within the 33 A+T− participants, eMTBR-tau243 measurements favored a two-component distribution. This subgroup finding is exploratory. The components are descriptive model-based groups, not validated clinical categories or diagnostic thresholds.
+eMTBR-tau243 discriminated tau PET-defined T status similarly to p-tau217, with no significant paired difference, and adding either marker to the other did not clearly improve discrimination. Unlike reports for mass-spectrometry eMTBR-tau243, the immunoassay signal changed at both the amyloid step and the tau step, behaving more like a T1-type fluid tau marker. Within tau PET-defined A+T−, eMTBR-tau243 values favored a two-component distribution that tracked p-tau217 and p-tau231; this analysis is exploratory, and the components are descriptive model-based groups, not validated clinical categories.
 
-The source-data label `MTBR-Tau243` refers to the analyte described as eMTBR-tau243 in the manuscript. The immunoassay has not been directly compared with mass-spectrometry measurement in the same samples; results from the two methods should not be assumed interchangeable.
+The source-data label `MTBR-Tau243` refers to the analyte described as eMTBR-tau243 in the manuscript. The immunoassay has not been compared with mass-spectrometry measurement in the same samples; results from the two methods should not be assumed interchangeable.
 
 ## Code and manuscript figures
 
@@ -56,7 +56,7 @@ The scripts expect an Excel workbook named `biomarker_result.xlsx` with a worksh
 ```text
 project/
 ├── biomarker_result.xlsx
-├── emtbr-tau243-immunoassay-vs-ptau217/
+├── plasma-emtbr-tau243-ptau217/
 └── outputs/
 ```
 
@@ -82,4 +82,4 @@ The figure scripts can then be run individually using the manuscript-to-script t
 
 ## Interpretation
 
-The analyses assess discrimination within this study cohort. Sample-derived cutoffs were not externally validated and should not be used for clinical decisions. The A+T− mixture-model groups require independent and longitudinal validation.
+The analyses assess discrimination within this single-center cohort. Sample-derived cutoffs were not externally validated, and the research-use-only assay should not be used for clinical T staging. Same-sample comparison with mass spectrometry, quantitative PET, longitudinal follow-up and independent validation are needed to define the biological and clinical meaning of the immunoassay signal.
