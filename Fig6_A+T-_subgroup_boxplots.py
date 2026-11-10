@@ -36,6 +36,11 @@ DEFAULT_INPUT = Path("/Users/qiuyuyue/Documents/My-Papers/Blood biomarkers/bioma
 INPUT = Path(os.environ.get("BIOMARKER_INPUT", str(DEFAULT_INPUT)))
 OUTPUT_DIR = Path(os.environ.get("BIOMARKER_OUTPUT_DIR", str(SCRIPT_DIR.parent / "outputs")))
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+# 2026-11-09 revision: "tauPET" restricts A+T- to tau PET-defined T- (n=18); the CSF row is
+# then omitted because only 6 of 18 have contemporaneous CSF (5 Low, 1 High; not evaluable).
+APTM_REFERENCE = os.environ.get("BIOMARKER_APTM_REFERENCE", "all")
+PET_ONLY = APTM_REFERENCE == "tauPET"
+EXPECTED_N = 18 if PET_ONLY else 33
 
 mpl.rcParams.update(
     {
@@ -92,15 +97,16 @@ def apoe4_carrier(value):
 
 df["APOE4_carrier"] = df["apoe"].map(apoe4_carrier)
 merged = membership.merge(df, on="SID", how="left", validate="one_to_one")
-assert len(merged) == 33, len(merged)
+assert len(merged) == EXPECTED_N, len(merged)
 
 q_clin_cont = pd.read_csv(OUTPUT_DIR / "A+T-Subgroup_continuous.csv").set_index("Variable")["FDR q (all clinical comparisons)"]
 q_clin_cat = pd.read_csv(OUTPUT_DIR / "A+T-Subgroup_categorical.csv").set_index("Variable")["FDR q (all clinical comparisons)"]
 q_plasma = pd.read_csv(OUTPUT_DIR / "A+T-Subgroup_biomarkers.csv").set_index("Variable")["FDR q (6 biomarkers)"]
 
 contemporaneous = merged[merged["CSF_Lumipulse_绝对时间差_天"].abs() <= 30].copy()
-assert len(contemporaneous) == 14, len(contemporaneous)
-q_csf = pd.read_csv(OUTPUT_DIR / "A+T-_CSF_Lumipulse_comparison.csv").set_index("Variable")["FDR q (evaluable CSF comparisons)"]
+if not PET_ONLY:
+    assert len(contemporaneous) == 14, len(contemporaneous)
+    q_csf = pd.read_csv(OUTPUT_DIR / "A+T-_CSF_Lumipulse_comparison.csv").set_index("Variable")["FDR q (evaluable CSF comparisons)"]
 
 
 def qfmt(v: float) -> str:
@@ -180,8 +186,9 @@ def bar_panel(ax, low_counts, high_counts, categories, label, q_value, bar_color
     ax.tick_params(axis="y", labelsize=6.0)
 
 
-fig = plt.figure(figsize=(9.8, 9.2))
-gs = fig.add_gridspec(3, 6, left=0.07, right=0.98, top=0.93, bottom=0.05, hspace=1.05, wspace=0.6)
+N_ROWS = 2 if PET_ONLY else 3
+fig = plt.figure(figsize=(9.8, 6.4 if PET_ONLY else 9.2))
+gs = fig.add_gridspec(N_ROWS, 6, left=0.07, right=0.98, top=0.90 if PET_ONLY else 0.93, bottom=0.07 if PET_ONLY else 0.05, hspace=1.05, wspace=0.6)
 
 # --- Row a: clinical / demographic (joint FDR family of 5) ---
 fig.text(0.015, 0.975, "a", fontsize=11, fontweight="bold")
@@ -218,7 +225,7 @@ bar_panel(ax, [int((apoe_low == False).sum()), int((apoe_low == True).sum())],
 fig.add_subplot(gs[0, 5]).axis("off")
 
 # --- Row b: plasma biomarkers (linear scale; joint FDR family of 6) ---
-fig.text(0.015, 0.635, "b", fontsize=11, fontweight="bold")
+fig.text(0.015, 0.47 if PET_ONLY else 0.635, "b", fontsize=11, fontweight="bold")
 
 for i, var in enumerate(PLASMA_ORDER):
     ax = fig.add_subplot(gs[1, i])
@@ -228,11 +235,12 @@ for i, var in enumerate(PLASMA_ORDER):
     box_panel(ax, low_vals, high_vals, f"{PLASMA_DISPLAY[var]} (pg/mL)", q_plasma[var], log=False)
 
 # --- Row c: CSF (linear scale; joint FDR family of 5; exploratory) ---
-fig.text(0.015, 0.30, "c", fontsize=11, fontweight="bold")
+for _row_c in ([] if PET_ONLY else [1]):
+    fig.text(0.015, 0.30, "c", fontsize=11, fontweight="bold")
 
 clow_m = contemporaneous["Plasma tau subgroup"].eq(LOW)
 chigh_m = contemporaneous["Plasma tau subgroup"].eq(HIGH)
-for i, (var, col) in enumerate(CSF_VARS):
+for i, (var, col) in enumerate([] if PET_ONLY else CSF_VARS):
     ax = fig.add_subplot(gs[2, i])
     low_vals = contemporaneous.loc[clow_m, col].dropna().to_numpy()
     high_vals = contemporaneous.loc[chigh_m, col].dropna().to_numpy()

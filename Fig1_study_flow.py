@@ -169,7 +169,7 @@ def draw(counts):
     rec1_x = main_x
     rec2_x = main_x + main_w - rec_w
     row1_y, row1_h = 0.745, 0.22
-    flow_box(ax, rec1_x, row1_y, rec_w, row1_h, "Memory-clinic participants",
+    flow_box(ax, rec1_x, row1_y, rec_w, row1_h, "Patients",
              counts["memory_clinic"],
              detail=f'A+ {counts["a_noncontrol_plus"]}  |  A− {counts["a_noncontrol_minus"]}',
              detail2=f'A reference: PET {counts["patient_a_pet"]} | CSF {counts["patient_a_csf"]}',
@@ -231,7 +231,7 @@ def draw(counts):
 
 def export_source_data(counts):
     rows = [
-        ("Recruitment", "Memory-clinic participants", counts["memory_clinic"]),
+        ("Recruitment", "Patients", counts["memory_clinic"]),
         ("Recruitment", "Healthy controls", counts["healthy_controls"]),
         ("Patient A status", "A+", counts["a_noncontrol_plus"]),
         ("Patient A status", "A−", counts["a_noncontrol_minus"]),
