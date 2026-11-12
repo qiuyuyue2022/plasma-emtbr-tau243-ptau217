@@ -46,11 +46,12 @@ def _clean(s):
     return s.astype("string").str.strip().str.replace("−", "-", regex=False)
 
 A, T = _clean(d["A"]), _clean(d["T"])
-pet = pd.to_numeric(d["taupet"], errors="coerce").eq(1)
-grp = pd.Series(np.select([A.eq("A-") & T.eq("T-"), A.eq("A+") & T.eq("T-"), A.eq("A+") & T.eq("T+")],
-                          ["A−T−", "A+T−", "A+T+"], "T unavailable"), index=d.index)
+# v3.60: tau PET-defined A/T groups among patients (T defined by tau PET only).
+pet = pd.to_numeric(d["taupet"], errors="coerce").eq(1) & d["DIAG"].ne("健康对照")
+grp = pd.Series(np.select([A.eq("A-") & T.eq("T-") & pet, A.eq("A+") & T.eq("T-") & pet, A.eq("A+") & T.eq("T+") & pet],
+                          ["A−T−", "A+T−", "A+T+"], "No tau PET-defined T"), index=d.index)
 extra = ["", "## Storage time by group", "", "| Group | n | Median years (IQR) |", "|---|---|---|"]
-for k in ["A−T−", "A+T−", "A+T+", "T unavailable"]:
+for k in ["A−T−", "A+T−", "A+T+", "No tau PET-defined T"]:
     y = years[grp.eq(k)]
     extra.append(f"| {k} | {len(y)} | {y.median():.1f} ({y.quantile(.25):.1f}–{y.quantile(.75):.1f}) |")
 kw = kruskal(*[years[grp.eq(k)] for k in ["A−T−", "A+T−", "A+T+"]]).pvalue
@@ -65,14 +66,14 @@ if mem_path.exists():
     extra.append(f"- Low vs High Mann–Whitney p={mannwhitneyu(*parts.values()).pvalue:.3f}.")
 mt = pd.to_numeric(d["MTBR-Tau243"], errors="coerce")
 p217 = pd.to_numeric(d["p-Tau217(≤0.758)"], errors="coerce")
-for lab, mask in [("Tau PET-defined A+T−", A.eq("A+") & T.eq("T-") & pet), ("A−T−", A.eq("A-") & T.eq("T-"))]:
+for lab, mask in [("Tau PET-defined A+T−", A.eq("A+") & T.eq("T-") & pet), ("Tau PET-defined A−T−", A.eq("A-") & T.eq("T-") & pet)]:
     r1, r2 = spearmanr(years[mask], mt[mask]), spearmanr(years[mask], p217[mask])
     extra.append(f"- {lab} (n={int(mask.sum())}): Spearman ρ storage vs MTBR-tau243 {r1[0]:.2f} (p={r1[1]:.2f}); vs p-tau217 {r2[0]:.2f} (p={r2[1]:.2f}).")
-ref = mt[A.eq("A-") & T.eq("T-")]
+ref = mt[A.eq("A-") & T.eq("T-") & pet]
 p95 = float(np.percentile(ref, 95))
 b = mt[A.eq("A+") & T.eq("T-") & pet]
 extra += ["", "## A−T−-referenced elevation", "",
-          f"A−T− 95th percentile of MTBR-tau243: {p95:.2f} pg/mL; tau PET-defined A+T− above it: {int((b > p95).sum())}/{len(b)}."]
+          f"Tau PET-defined A−T− (n={len(ref)}) 95th percentile of MTBR-tau243: {p95:.2f} pg/mL; tau PET-defined A+T− above it: {int((b > p95).sum())}/{len(b)}."]
 with open(OUT / "storage_time_and_intervals.md", "a", encoding="utf-8") as fh:
     fh.write("\n".join(extra) + "\n")
 print("\n".join(extra))

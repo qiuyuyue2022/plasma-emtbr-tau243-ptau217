@@ -1,6 +1,5 @@
 """Compare data-driven subgroups within the A+T- participants, on both the
-biomarkers that define Table 4 and the contemporaneous CSF Lumipulse data
-that feeds Figure 4.
+biomarkers (Supplementary Table S8 and Figure 6).
 
 Part 1 fits a two-component Gaussian mixture model to log10(MTBR-Tau243),
 the biomarker with evidence of bimodality, to define Low/High MTBR-Tau243
@@ -11,9 +10,9 @@ assignment. Component numbers are converted to stable, interpretable
 Low/High labels, so the output does not depend on scikit-learn's arbitrary
 component IDs.
 
-Part 2 reuses those same Low/High subgroup assignments -- the GMM is
-deliberately not refitted -- to compare contemporaneous CSF Lumipulse
-biomarkers in the smaller subset of A+T- participants who have CSF data.
+v3.60 (2026-11-11): restricted to the 18 tau PET-defined A+T− patients; the
+pooled (n=33) mode and the contemporaneous CSF comparison (Part 2; only 6 of
+18 had CSF, 5 Low and 1 High, not evaluable) were removed.
 
 Outputs are deliberately de-identified: the participant-level membership
 file contains SID but not name or hospital ID.
@@ -37,19 +36,13 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 DEFAULT_INPUT = PROJECT_DIR / "biomarker_result.xlsx"
 INPUT = Path(os.environ.get("BIOMARKER_INPUT", str(DEFAULT_INPUT)))
-OUTPUT_DIR = Path(os.environ.get("BIOMARKER_OUTPUT_DIR", str(PROJECT_DIR / "outputs")))
+OUTPUT_DIR = Path(os.environ.get("BIOMARKER_OUTPUT_DIR", str(PROJECT_DIR / "outputs" / "Aplus_Tminus_tauPET_only")))
 
-# A+T- reference restriction (2026-11-09 revision, roadmap REV-15): "all" = tau PET- or
-# CSF-defined T- (n=33, original analysis); "tauPET" = tau PET-defined T- only (n=18).
-APTM_REFERENCE = os.environ.get("BIOMARKER_APTM_REFERENCE", "all")
-if APTM_REFERENCE not in {"all", "tauPET"}:
-    raise ValueError(f"BIOMARKER_APTM_REFERENCE must be all or tauPET, got {APTM_REFERENCE}")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 RANDOM_SEED = int(os.environ.get("BIOMARKER_RANDOM_SEED", "20261026"))
 N_PERMUTATIONS = int(os.environ.get("BIOMARKER_SUBGROUP_PERMUTATIONS", "10000"))
 MIN_N_PER_GROUP = 3
-CSF_T_PTAU181_CUTOFF = 61.6
 
 LOW = "Low MTBR-Tau243"
 HIGH = "High MTBR-Tau243"
@@ -73,17 +66,10 @@ BIOMARKERS = [
     "NFL",
 ]
 
-CSF_VARIABLES = [
-    ("CSF Aβ42/Aβ40", "CSF_Lumipulse_Aβ42/Aβ40"),
-    ("CSF p-tau181", "CSF_Lumipulse_p-tau"),
-    ("CSF t-tau", "CSF_Lumipulse_t-tau"),
-    ("CSF p-tau181/Aβ42", "CSF_Lumipulse_p-tau/Aβ42"),
-    ("CSF t-tau/Aβ42", "CSF_Lumipulse_t-tau/Aβ42"),
-]
 
 
 # ---------------------------------------------------------------------------
-# Shared helpers (used by both the subgroup-definition part and the CSF part)
+# Shared helpers
 # ---------------------------------------------------------------------------
 
 def clean_status(series: pd.Series) -> pd.Series:
@@ -196,9 +182,10 @@ def prepare_data(path: Path) -> pd.DataFrame:
     data["NFL"] = data[COL["nfl"]]
 
     mask = clean_status(data["A"]).eq("A+") & clean_status(data["T"]).eq("T-")
-    if APTM_REFERENCE == "tauPET":  # 2026-11-09 revision: tau PET-defined A+T- only (n=18)
-        mask &= pd.to_numeric(data["taupet"], errors="coerce").eq(1)
+    mask &= pd.to_numeric(data["taupet"], errors="coerce").eq(1)  # tau PET-defined T- only
     subset = data.loc[mask].copy()
+    if len(subset) != 18:
+        raise ValueError(f"Expected 18 tau PET-defined A+T- patients; found {len(subset)}.")
     if len(subset) < 10:
         raise ValueError(f"Only {len(subset)} A+T- participants were found; check A/T coding.")
 
@@ -501,312 +488,6 @@ def write_summary(
     (OUTPUT_DIR / "A+T-Subgroup_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
-# Part 2: contemporaneous CSF Lumipulse comparison in the same subgroups; feeds Figure 4
-# ---------------------------------------------------------------------------
-
-def exact_permutation_mann_whitney(
-    high: np.ndarray, low: np.ndarray
-) -> tuple[float, float, int]:
-    """Tie-aware exact randomization p-value for the Mann-Whitney statistic."""
-    pooled = np.concatenate([high, low])
-    n_high = len(high)
-    n_low = len(low)
-    ranks = rankdata(pooled, method="average")
-    observed_u = float(ranks[:n_high].sum() - n_high * (n_high + 1) / 2)
-    expected_u = n_high * n_low / 2
-    observed_distance = abs(observed_u - expected_u)
-
-    extreme = 0
-    total = 0
-    for high_indices in combinations(range(len(pooled)), n_high):
-        u_value = float(ranks[list(high_indices)].sum() - n_high * (n_high + 1) / 2)
-        if abs(u_value - expected_u) >= observed_distance - 1e-12:
-            extreme += 1
-        total += 1
-    return observed_u, extreme / total, total
-
-
-def median_iqr_csf(values: np.ndarray) -> str:
-    q1, median, q3 = np.quantile(values, [0.25, 0.5, 0.75])
-    return f"{median:.4g} [{q1:.4g}, {q3:.4g}]"
-
-
-def prepare_csf_data(membership: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load the raw workbook again for the CSF-specific columns and merge in
-    the Low/High subgroup assignment already computed in Part 1 (`membership`
-    has SID + Plasma tau subgroup; the GMM is not refitted here)."""
-    data = pd.read_excel(INPUT, sheet_name="Sheet1")
-    required = {
-        "SID", "A", "T", "method", "taupet", "CSF_Lumipulse_采样时间",
-        "CSF_Lumipulse_绝对时间差_天", *[column for _, column in CSF_VARIABLES],
-    }
-    missing = sorted(required.difference(data.columns))
-    if missing:
-        raise KeyError(f"Missing required columns in {INPUT}: {missing}")
-    if not {"SID", "Plasma tau subgroup"}.issubset(membership.columns):
-        raise KeyError("The locked membership table lacks SID or Plasma tau subgroup.")
-    if membership["SID"].duplicated().any():
-        raise ValueError("The locked membership table contains duplicate SID values.")
-
-    mask = clean_status(data["A"]).eq("A+") & clean_status(data["T"]).eq("T-")
-    if APTM_REFERENCE == "tauPET":  # 2026-11-09 revision: tau PET-defined A+T- only (n=18)
-        mask &= pd.to_numeric(data["taupet"], errors="coerce").eq(1)
-    all_at = data.loc[mask].copy()
-    all_at = all_at.merge(
-        membership[["SID", "Plasma tau subgroup"]],
-        on="SID",
-        how="left",
-        validate="one_to_one",
-    )
-    if len(all_at) != (18 if APTM_REFERENCE == "tauPET" else 33):
-        raise ValueError(f"Expected 33 A+T- participants; found {len(all_at)}.")
-    if all_at["Plasma tau subgroup"].isna().any():
-        raise ValueError("Some A+T- participants lack locked subgroup assignments.")
-
-    for _, column in CSF_VARIABLES:
-        all_at[column] = pd.to_numeric(all_at[column], errors="coerce")
-    all_at["CSF_Lumipulse_绝对时间差_天"] = pd.to_numeric(
-        all_at["CSF_Lumipulse_绝对时间差_天"], errors="coerce"
-    )
-    csf_subset = all_at.loc[all_at["CSF_Lumipulse_采样时间"].notna()].copy()
-    if len(csf_subset) != (6 if APTM_REFERENCE == "tauPET" else 14):
-        raise ValueError(f"Expected 14 contemporaneous CSF matches; found {len(csf_subset)}.")
-    return all_at, csf_subset
-
-
-def compare_csf(csf_subset: pd.DataFrame) -> pd.DataFrame:
-    rows: list[dict[str, object]] = []
-    for label, column in CSF_VARIABLES:
-        low = csf_subset.loc[
-            csf_subset["Plasma tau subgroup"] == LOW, column
-        ].dropna().to_numpy(dtype=float)
-        high = csf_subset.loc[
-            csf_subset["Plasma tau subgroup"] == HIGH, column
-        ].dropna().to_numpy(dtype=float)
-        if len(low) == 0 or len(high) == 0:
-            rows.append(
-                {
-                    "Variable": label,
-                    "Source column": column,
-                    "Low n": len(low),
-                    "High n": len(high),
-                    "Test status": "Not tested: one group has no observations",
-                }
-            )
-            continue
-
-        base = {
-            "Variable": label,
-            "Source column": column,
-            "Low n": len(low),
-            "Low median [IQR]": median_iqr_csf(low),
-            "High n": len(high),
-            "High median [IQR]": median_iqr_csf(high),
-        }
-        if len(low) < MIN_N_PER_GROUP or len(high) < MIN_N_PER_GROUP:
-            rows.append(
-                {
-                    **base,
-                    "Test status": f"Descriptive only: fewer than {MIN_N_PER_GROUP} observations in a group",
-                }
-            )
-            continue
-
-        u_statistic, p_value, permutations = exact_permutation_mann_whitney(high, low)
-        rank_biserial = 2 * u_statistic / (len(high) * len(low)) - 1
-        fc_estimate, fc_low, fc_high = fold_change_estimate(high, low)
-        rows.append(
-            {
-                **base,
-                "Fold-change (High / Low), Hodges-Lehmann": fc_estimate,
-                "Fold-change 95% CI lower": fc_low,
-                "Fold-change 95% CI upper": fc_high,
-                "Mann-Whitney U (High group)": u_statistic,
-                "Exact permutation count": permutations,
-                "Raw p": p_value,
-                "Rank-biserial r (positive means higher in High group)": rank_biserial,
-                "Test status": "Tested",
-            }
-        )
-
-    result = pd.DataFrame(rows)
-    result["FDR q (evaluable CSF comparisons)"] = bh_adjust(result["Raw p"])
-    return result
-
-
-def build_coverage(all_at: pd.DataFrame, csf_subset: pd.DataFrame) -> pd.DataFrame:
-    rows = []
-    for group in [LOW, HIGH]:
-        full_n = int((all_at["Plasma tau subgroup"] == group).sum())
-        matched = csf_subset.loc[csf_subset["Plasma tau subgroup"] == group]
-        rows.append(
-            {
-                "Plasma tau subgroup": group,
-                "A+T- total n": full_n,
-                "Contemporaneous CSF n": len(matched),
-                "CSF availability (%)": 100 * len(matched) / full_n,
-                "Absolute blood-CSF interval, median [range], days": (
-                    f"{matched['CSF_Lumipulse_绝对时间差_天'].median():.1f} "
-                    f"[{matched['CSF_Lumipulse_绝对时间差_天'].min():.0f}, "
-                    f"{matched['CSF_Lumipulse_绝对时间差_天'].max():.0f}]"
-                ),
-                "Tau PET reference n": int((matched["taupet"] == 1).sum()),
-                "Non-Tau-PET reference n": int((matched["taupet"] != 1).sum()),
-            }
-        )
-    return pd.DataFrame(rows)
-
-
-def availability_fisher(all_at: pd.DataFrame) -> tuple[float, float]:
-    table = []
-    for group in [LOW, HIGH]:
-        group_data = all_at.loc[all_at["Plasma tau subgroup"] == group]
-        available = int(group_data["CSF_Lumipulse_采样时间"].notna().sum())
-        table.append([available, len(group_data) - available])
-    odds_ratio, p_value = fisher_exact(np.asarray(table), alternative="two-sided")
-    return float(odds_ratio), float(p_value)
-
-
-def write_csf_report(
-    results: pd.DataFrame,
-    coverage: pd.DataFrame,
-    availability_or: float,
-    availability_p: float,
-) -> None:
-    lines = [
-        "## Material Passport",
-        "",
-        "- Origin Skill: experiment-agent",
-        "- Origin Mode: validate",
-        "- Origin Date: 2026-10-29",
-        "- Verification Status: ANALYZED",
-        "- Version Label: validation_v1",
-        "",
-        "# A+T− low versus high plasma eMTBR-tau243: CSF Lumipulse comparison",
-        "",
-        "## Analysis set and method",
-        "",
-        "- Subgroups were inherited from the locked 33-participant log10(eMTBR-tau243) GMM; the model was not refitted in the CSF subset.",
-        "- Contemporaneous CSF was defined by the existing merge rule: nearest same-ID Lumipulse sample within 30 days of blood collection.",
-        "- Continuous outcomes used a tie-aware exact permutation Mann-Whitney test, rank-biserial effect size, and "
-        "a log10-scale Hodges-Lehmann estimate back-transformed to a fold-change (High / Low) with its 95% CI, "
-        "appropriate for these right-skewed concentration measures.",
-        f"- Benjamini-Hochberg FDR correction was applied jointly to all {int(results['Raw p'].notna().sum())} CSF comparisons.",
-        "",
-        "## Coverage",
-        "",
-        coverage.to_markdown(index=False),
-        "",
-        f"CSF availability comparison: Fisher exact odds ratio={availability_or:.3g}, p={availability_p:.3f}.",
-        "",
-        "## Statistical findings",
-        "",
-        "| Variable | Low median [IQR] | High median [IQR] | Fold-change, High / Low (95% CI) | Exact p | FDR q | Rank-biserial r |",
-        "|---|---:|---:|---:|---:|---:|---:|",
-    ]
-    for _, row in results.iterrows():
-        lines.append(
-            f"| {row['Variable']} | {row['Low median [IQR]']} (n={int(row['Low n'])}) | "
-            f"{row['High median [IQR]']} (n={int(row['High n'])}) | "
-            f"{format_number(row.get('Fold-change (High / Low), Hodges-Lehmann'))}x "
-            f"({format_number(row.get('Fold-change 95% CI lower'))}, {format_number(row.get('Fold-change 95% CI upper'))}) | "
-            f"{format_p(row.get('Raw p'))} | {format_p(row.get('FDR q (evaluable CSF comparisons)'))} | "
-            f"{format_number(row.get('Rank-biserial r (positive means higher in High group)'), 2)} |"
-        )
-
-    lines.extend(
-        [
-            "",
-            "## Warnings",
-            "",
-            "- Overall confidence: CAUTION. Only 14 participants had contemporaneous CSF (6 low, 8 high), and some analytes had additional missingness.",
-            "- The T-reference composition was imbalanced: 5/6 low-group participants but only 1/8 high-group participants had Tau PET available.",
-            f"- For participants whose T− classification used CSF p-tau181 ≤{CSF_T_PTAU181_CUTOFF:g}, comparison of absolute CSF p-tau181 is conditioned on the classification cutoff and is not an independent validation.",
-            "- CSF p-tau181/Aβ42 and t-tau/Aβ42 were not used to define T status, but their subgroup differences remain exploratory and may reflect the Aβ42 denominator as well as the tau numerator.",
-            "- The analysis is exploratory and cross-sectional. It cannot establish that plasma eMTBR-tau243 changes before CSF or PET tau pathology.",
-            "",
-            "## Fallacy scan",
-            "",
-            "- Coverage: 11/11 checked.",
-            "- Simpson's paradox: CAUTION; reference-standard composition differs between subgroups and cannot be meaningfully stratified at this sample size.",
-            "- Ecological fallacy: not applicable; participant-level data were analyzed.",
-            "- Berkson's paradox: CAUTION; analysis is restricted to A+T− participants with contemporaneous CSF.",
-            "- Collider bias: CAUTION; conditioning on A+T− status may alter biomarker associations.",
-            "- Base-rate neglect: not applicable; no diagnostic predictive values are reported.",
-            "- Regression to the mean: no repeated-change claim was made.",
-            "- Survivorship/availability bias: CAUTION; only 14/33 participants contributed CSF data.",
-            f"- Look-elsewhere effect: addressed with BH-FDR across all {int(results['Raw p'].notna().sum())} CSF tests.",
-            "- Garden of forking paths: CAUTION; exploratory outcome family and 30-day window should be locked before manuscript reporting.",
-            "- Correlation does not imply causation: CAUTION; group differences are associational.",
-            "- Reverse causality: CAUTION; cross-sectional timing cannot establish temporal order.",
-            "",
-            "## Reproducibility",
-            "",
-            "- Method: deterministic group membership, exhaustive label permutations, and a closed-form Hodges-Lehmann interval.",
-            "- Verdict: CANNOT_VERIFY from this single execution; the statistical output is ANALYZED.",
-        ]
-    )
-    (OUTPUT_DIR / "A+T-_CSF_Lumipulse_validation.md").write_text(
-        "\n".join(lines) + "\n", encoding="utf-8"
-    )
-
-
-def write_manuscript_table_s6(results: pd.DataFrame, coverage: pd.DataFrame) -> None:
-    """Format the same CSF comparison as a manuscript-ready Supplementary
-    Table S6, matching the TableS5/TableS1 markdown-table style, rather than
-    the raw analysis-passport report written by write_csf_report(). This was
-    added 2026-11-01 at author direction: the manuscript text (Results
-    Section 3.7) and 00_story_outline_and_analysis_lock.md had both already
-    referenced "Supplementary Table S5" as available, but no formatted table
-    file had actually been generated -- only the passport-style
-    A+T-_CSF_Lumipulse_validation.md existed. Renumbered S5 -> S6 later the
-    same day to match true first-citation order (changelog 3.10)."""
-    low_n = int(coverage.loc[coverage["Plasma tau subgroup"] == LOW, "Contemporaneous CSF n"].iloc[0])
-    high_n = int(coverage.loc[coverage["Plasma tau subgroup"] == HIGH, "Contemporaneous CSF n"].iloc[0])
-    lines = [
-        "# Supplementary Table S8. Contemporaneous CSF comparison between eMTBR-tau243-defined Low and High A+T− groups",
-        "",
-        f"| Characteristic | Low (n={low_n}) | High (n={high_n}) | Fold-change, High/Low (95% CI) | Exact p | FDR q | Rank-biserial r |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
-    ]
-    for _, row in results.iterrows():
-        if row.get("Test status") != "Tested":
-            continue
-        fc = format_number(row.get("Fold-change (High / Low), Hodges-Lehmann"), 3)
-        fc_lo = format_number(row.get("Fold-change 95% CI lower"), 2)
-        fc_hi = format_number(row.get("Fold-change 95% CI upper"), 2)
-        r_value = row.get("Rank-biserial r (positive means higher in High group)")
-        lines.append(
-            f"| {row['Variable']} | {row['Low median [IQR]']} | {row['High median [IQR]']} | "
-            f"{fc}x ({fc_lo}, {fc_hi}) | {format_p(row.get('Raw p'))} | "
-            f"{format_p(row.get('FDR q (evaluable CSF comparisons)'))} | {r_value:.2f} |"
-        )
-    lines.append("")
-    lines.append(
-        "Subgroup membership (Low/High eMTBR-tau243) is inherited from the full-sample 33-participant "
-        "Gaussian-mixture model (Supplementary Table S7) and was not refit in this CSF subset. Contemporaneous "
-        "CSF was defined as the nearest same-participant LUMIPULSE sample within 30 days of blood collection; "
-        f"only {low_n + high_n} of 33 A+T− participants ({low_n} Low, {high_n} High) had contemporaneous CSF, "
-        "and CSF availability did not differ significantly between subgroups (Fisher exact OR=1.62, p=0.716). "
-        "The T-reference composition of this CSF subset was imbalanced (5/6 Low participants but only 1/8 High "
-        "participants had tau PET), so these ratio findings are exploratory profile differences rather than "
-        "independent validation of the plasma-defined groups. CSF p-tau181/Aβ42 and t-tau/Aβ42 were not used to "
-        "define T status; for CSF-classified participants, the operational T rule used absolute CSF p-tau181 at "
-        "a cutoff of 61.6 pg/mL, so comparisons of absolute CSF p-tau181 are partly conditioned on that cutoff. "
-        "Benjamini-Hochberg FDR correction was applied jointly across these five comparisons.\n"
-    )
-    (OUTPUT_DIR / "TableS8_Aplus_Tminus_CSF_comparison.md").write_text(
-        "\n".join(lines), encoding="utf-8"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Entry point: Part 1 (subgroup definition, feeds Table 4), then Part 2
-# (CSF comparison in the same subgroups, feeds Figure 4) -- in one pass, no
-# round trip through a membership CSV between the two parts.
-# ---------------------------------------------------------------------------
-
 def main() -> None:
     # --- Part 1: define Low/High MTBR-Tau243 subgroups ---
     data = prepare_data(INPUT)
@@ -852,37 +533,6 @@ def main() -> None:
     print(f"A+T- participants analyzed: {len(data)}")
     print(data["Plasma tau subgroup"].value_counts(sort=False).to_string())
     print(f"Results written to: {OUTPUT_DIR}")
-
-    # --- Part 2: compare contemporaneous CSF Lumipulse biomarkers in the ---
-    # --- same subgroups (the GMM above is not refitted here) ---
-    if APTM_REFERENCE == "tauPET":
-        print("\nCSF comparison skipped: only 6 tau PET-defined A+T- participants have "
-              "contemporaneous CSF (5 Low, 1 High), which is not evaluable.")
-        return
-    all_at, csf_subset = prepare_csf_data(membership)
-    csf_results = compare_csf(csf_subset)
-    coverage = build_coverage(all_at, csf_subset)
-    availability_or, availability_p = availability_fisher(all_at)
-
-    csf_results.to_csv(OUTPUT_DIR / "A+T-_CSF_Lumipulse_comparison.csv", index=False)
-    coverage.to_csv(OUTPUT_DIR / "A+T-_CSF_Lumipulse_coverage.csv", index=False)
-    write_csf_report(csf_results, coverage, availability_or, availability_p)
-    # write_manuscript_table_s6() disabled 2026-11-10: the CSF comparison table was removed from the
-    # manuscript, and its file name collided with the current Supplementary Table S8.
-
-    print(f"\nA+T- participants with contemporaneous CSF: {len(csf_subset)}")
-    print(csf_subset["Plasma tau subgroup"].value_counts(sort=False).to_string())
-    print("\nCSF comparison:")
-    print(
-        csf_results[
-            [
-                "Variable", "Low n", "Low median [IQR]", "High n",
-                "High median [IQR]", "Raw p", "FDR q (evaluable CSF comparisons)",
-                "Rank-biserial r (positive means higher in High group)",
-            ]
-        ].to_string(index=False)
-    )
-    print(f"\nResults written to: {OUTPUT_DIR}")
 
 
 if __name__ == "__main__":

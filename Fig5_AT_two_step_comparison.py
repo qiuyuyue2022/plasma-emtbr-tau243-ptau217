@@ -81,11 +81,11 @@ def qtext(q: float) -> str:
 def main() -> None:
     d = pd.read_excel(INPUT, sheet_name="Sheet1")
     a, t = clean(d["A"]), clean(d["T"])
-    pet = pd.to_numeric(d["taupet"], errors="coerce").eq(1)
+    pet = pd.to_numeric(d["taupet"], errors="coerce").eq(1) & d["DIAG"].ne("健康对照")  # v3.60: patients only
     masks = {"A−T−": a.eq("A-") & t.eq("T-") & pet, "A+T−": a.eq("A+") & t.eq("T-") & pet,
              "A+T+": a.eq("A+") & t.eq("T+") & pet}
     counts = {k: int(m.sum()) for k, m in masks.items()}
-    if counts != {"A−T−": 16, "A+T−": 18, "A+T+": 34}:
+    if counts != {"A−T−": 15, "A+T−": 18, "A+T+": 34}:
         raise AssertionError(f"Unexpected tau PET-defined group sizes: {counts}")
 
     vals = {name: {g: pd.to_numeric(d.loc[m, col], errors="coerce").dropna().to_numpy() for g, m in masks.items()}

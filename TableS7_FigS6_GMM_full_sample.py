@@ -23,13 +23,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 DEFAULT_INPUT = PROJECT_DIR / "biomarker_result.xlsx"
 INPUT = Path(os.environ.get("BIOMARKER_INPUT", str(DEFAULT_INPUT)))
-OUTPUT_DIR = Path(os.environ.get("BIOMARKER_OUTPUT_DIR", str(PROJECT_DIR / "outputs")))
+# v3.60 (2026-11-11): the A+T− analysis is restricted to the 18 tau PET-defined A+T− patients;
+# the pooled (tau PET or CSF, n=33) mode was removed.
+OUTPUT_DIR = Path(os.environ.get("BIOMARKER_OUTPUT_DIR", str(PROJECT_DIR / "outputs" / "Aplus_Tminus_tauPET_only")))
 
-# A+T- reference restriction (2026-11-09 revision, roadmap REV-15): "all" = tau PET- or
-# CSF-defined T- (n=33, original analysis); "tauPET" = tau PET-defined T- only (n=18).
-APTM_REFERENCE = os.environ.get("BIOMARKER_APTM_REFERENCE", "all")
-if APTM_REFERENCE not in {"all", "tauPET"}:
-    raise ValueError(f"BIOMARKER_APTM_REFERENCE must be all or tauPET, got {APTM_REFERENCE}")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 RANDOM_SEED = int(os.environ.get("BIOMARKER_RANDOM_SEED", "20261026"))
@@ -210,8 +207,7 @@ def prepare_subset() -> pd.DataFrame:
     if missing:
         raise KeyError(f"Required columns are missing: {missing}")
     mask = clean_status(data["A"]).eq("A+") & clean_status(data["T"]).eq("T-")
-    if APTM_REFERENCE == "tauPET":  # 2026-11-09 revision: tau PET-defined A+T- only (n=18)
-        mask &= pd.to_numeric(data["taupet"], errors="coerce").eq(1)
+    mask &= pd.to_numeric(data["taupet"], errors="coerce").eq(1)  # tau PET-defined T- only
     subset = data.loc[mask, ["SID", *MARKERS.values()]].copy()
     for column in MARKERS.values():
         subset[column] = pd.to_numeric(subset[column], errors="coerce")

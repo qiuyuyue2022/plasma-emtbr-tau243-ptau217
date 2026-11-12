@@ -65,12 +65,8 @@ HIGH_COLOR = "#C44E52"
 NEUTRAL = "#8C8C8C"
 TEXT = "#2B2B2B"
 
-MEMBERSHIP_PATH = OUTPUT_DIR / "A+T-Subgroup_membership.csv"
-FULL_SUMMARY_PATH = OUTPUT_DIR / "bimodality_validation_summary.csv"
-REFERENCE_SUMMARY_PATH = OUTPUT_DIR / "GMM_reference_stratified_summary.csv"
-REFERENCE_DENSITY_PATH = OUTPUT_DIR / "GMM_reference_stratified_figure_source_data.csv"
-REFERENCE_ASSIGNMENTS_PATH = OUTPUT_DIR / "GMM_reference_stratified_assignments.csv"
-STEM = OUTPUT_DIR / "FigS6_Aplus_Tminus_heterogeneity"
+APTM_DIR = OUTPUT_DIR / "Aplus_Tminus_tauPET_only"
+STEM = OUTPUT_DIR / "FigS5_Aplus_Tminus_heterogeneity"  # FigS6 before v3.60; FigS4 in v3.60
 
 
 def require_columns(frame: pd.DataFrame, columns: set[str], name: str) -> None:
@@ -232,95 +228,14 @@ def plot_full_gmm(
         0.02,
         0.95,
         f"ΔBIC = {locked['Observed delta BIC']:.2f}\n"
-        "p < 0.001",
+        f"p = {float(locked['Parametric-bootstrap LRT p under 1-component null']):.3f}",
         transform=axis.transAxes,
         ha="left",
         va="top",
         fontsize=6.3,
         color=TEXT,
     )
-    add_panel_label(axis, "a")
-
-
-def plot_reference_stratum(
-    axis: plt.Axes,
-    stratum: str,
-    density: pd.DataFrame,
-    assignments: pd.DataFrame,
-    summary: pd.Series,
-) -> None:
-    local_density = density.loc[density["Reference stratum"].eq(stratum)]
-    local_people = assignments.loc[assignments["Reference stratum"].eq(stratum)]
-    x = local_density["log10 eMTBR-tau243"].to_numpy()
-    axis.fill_between(
-        x,
-        local_density["Low-component weighted density"],
-        color=LOW_COLOR,
-        alpha=0.13,
-        linewidth=0,
-    )
-    axis.fill_between(
-        x,
-        local_density["High-component weighted density"],
-        color=HIGH_COLOR,
-        alpha=0.11,
-        linewidth=0,
-    )
-    axis.plot(
-        x,
-        local_density["One-component density"],
-        color="#A0A0A0",
-        linewidth=0.9,
-        linestyle=(0, (4, 2)),
-    )
-    axis.plot(
-        x,
-        local_density["Two-component total density"],
-        color=TEXT,
-        linewidth=1.55,
-    )
-    axis.axvline(
-        np.log10(float(summary["Observed decision boundary"])),
-        color="#333333",
-        linewidth=0.9,
-        linestyle=":",
-    )
-    ymax = max(
-        local_density["One-component density"].max(),
-        local_density["Two-component total density"].max(),
-    )
-    rug_low = -0.045 * ymax
-    for _, person in local_people.iterrows():
-        rug_color = HIGH_COLOR if person["Observed subgroup"] == "High" else LOW_COLOR
-        value = np.log10(float(person["eMTBR-tau243"]))
-        axis.plot([value, value], [rug_low, 0], color=rug_color, linewidth=0.65, alpha=0.7, clip_on=False)
-    ticks, ticklabels = original_scale_ticks(x.min(), x.max())
-    axis.set_xticks(ticks)
-    axis.set_xticklabels(ticklabels, fontsize=5.8)
-    axis.set_xlim(x.min(), x.max())
-    axis.set_ylim(rug_low * 1.8, ymax * 1.17)
-    title = "Tau PET-confirmed T−" if stratum == "Tau PET-negative" else "CSF-defined T−"
-    # Panel title removed at author direction (2026-11-01); described in the
-    # supplementary figure legend for S6 instead.
-    p_value = float(summary["Parametric-bootstrap LRT p"])
-    if stratum == "Tau PET-negative":
-        # 2026-11-09 revision: the tau PET-defined group (n=18) is now the primary analysis; show the
-        # p value from its primary run (02a with BIOMARKER_APTM_REFERENCE=tauPET), which the text and
-        # Supplementary Table S7 report. No BH-FDR q: the two strata are no longer a correction family.
-        primary = pd.read_csv(OUTPUT_DIR / "Aplus_Tminus_tauPET_only" / "bimodality_validation_summary.csv").set_index("Marker")
-        p_value = float(primary.loc["MTBR-Tau243", "Parametric-bootstrap LRT p under 1-component null"])
-    p_text = f"p={p_value:.3f}"
-    axis.text(
-        0.03,
-        0.95,
-        f"ΔBIC {summary['Observed delta BIC']:.2f}\n{p_text}",
-        transform=axis.transAxes,
-        ha="left",
-        va="top",
-        fontsize=5.9,
-        color=TEXT,
-    )
-    axis.tick_params(axis="y", labelsize=5.8, length=2.5)
+    # single-panel figure: no panel letter
 
 
 def save_figure(figure: plt.Figure) -> None:
@@ -345,62 +260,26 @@ def save_figure(figure: plt.Figure) -> None:
 
 
 def main() -> None:
-    membership = pd.read_csv(MEMBERSHIP_PATH)
-    full_summary = pd.read_csv(FULL_SUMMARY_PATH)
-    reference_summary = pd.read_csv(REFERENCE_SUMMARY_PATH)
-    reference_density = pd.read_csv(REFERENCE_DENSITY_PATH)
-    reference_assignments = pd.read_csv(REFERENCE_ASSIGNMENTS_PATH)
+    # v3.60 (2026-11-11): Supplementary Figure S5 (S4 in v3.60) shows the mixture-model fit within the
+    # 18 tau PET-defined A+T− patients, from the outputs of TableS7_FigS6_GMM_full_sample.py
+    # (summary) and TableS8_Aplus_Tminus_subgroup_comparison.py (membership) in
+    # outputs/Aplus_Tminus_tauPET_only/. The pooled (n=33) and CSF-defined (n=15) panels
+    # were removed; the GMM is refitted here only to draw the curves and is checked
+    # against the locked ΔBIC.
+    membership = pd.read_csv(APTM_DIR / "A+T-Subgroup_membership.csv")
+    summary = pd.read_csv(APTM_DIR / "bimodality_validation_summary.csv")
+    require_columns(membership, {"SID", "Plasma tau subgroup", "MTBR-Tau243"}, "Subgroup membership")
+    if len(membership) != 18:
+        raise AssertionError(f"Expected 18 tau PET-defined A+T− patients, found {len(membership)}.")
+    density = build_full_density(membership, summary)
+    locked = summary.loc[summary["Marker"].eq("MTBR-Tau243")].iloc[0]
 
-    require_columns(
-        membership,
-        {"SID", "Plasma tau subgroup", "MTBR-Tau243"},
-        "Subgroup membership",
-    )
-    if len(membership) != 33:
-        raise AssertionError(f"Expected 33 A+T- participants, found {len(membership)}.")
-    if membership["Plasma tau subgroup"].value_counts().to_dict() != {
-        "High MTBR-Tau243": 21,
-        "Low MTBR-Tau243": 12,
-    }:
-        raise AssertionError("Locked full-group subgroup counts changed.")
-
-    full_density = build_full_density(membership, full_summary)
-    locked_full = full_summary.loc[full_summary["Marker"].eq("MTBR-Tau243")].iloc[0]
-
-    figure = plt.figure(figsize=(7.2, 2.75))
-    outer = figure.add_gridspec(
-        1,
-        2,
-        left=0.085,
-        right=0.985,
-        bottom=0.265,
-        top=0.895,
-        width_ratios=[1.04, 1.0],
-        wspace=0.36,
-    )
-
-    axis_a = figure.add_subplot(outer[0, 0])
-    plot_full_gmm(axis_a, full_density, membership, locked_full)
-
-    reference_grid = outer[0, 1].subgridspec(1, 2, wspace=0.30)
-    axis_b1 = figure.add_subplot(reference_grid[0, 0])
-    axis_b2 = figure.add_subplot(reference_grid[0, 1], sharey=axis_b1)
-    for axis, stratum in [
-        (axis_b1, "Tau PET-negative"),
-        (axis_b2, "CSF-defined T-negative"),
-    ]:
-        row = reference_summary.loc[reference_summary["Reference stratum"].eq(stratum)].iloc[0]
-        plot_reference_stratum(
-            axis,
-            stratum,
-            reference_density,
-            reference_assignments,
-            row,
-        )
-    axis_b1.set_ylabel("Density", fontsize=6.2)
-    axis_b2.tick_params(labelleft=False)
-    figure.text(0.545, 0.955, "b", fontsize=9, fontweight="bold", ha="left", va="top")
-    figure.supxlabel("eMTBR-tau243 (pg/mL, log scale)", x=0.53, y=0.145, fontsize=7)
+    figure = plt.figure(figsize=(3.6, 2.9))
+    axis = figure.add_axes([0.15, 0.32, 0.80, 0.62])
+    plot_full_gmm(axis, density, membership, locked)
+    axis.set_ylabel("Density", fontsize=6.2)
+    axis.set_xlabel("eMTBR-tau243 (pg/mL, log scale)", fontsize=7)
+    axis.tick_params(labelsize=5.8, length=2.5)
 
     legend_handles = [
         Line2D([0], [0], color=NEUTRAL, linewidth=1.1, linestyle=(0, (4, 2)), label="One-component fit"),
@@ -409,56 +288,33 @@ def main() -> None:
         Line2D([0], [0], marker="|", color=LOW_COLOR, linestyle="None", markersize=8, label="Low component"),
         Line2D([0], [0], marker="|", color=HIGH_COLOR, linestyle="None", markersize=8, label="High component"),
     ]
-    figure.legend(
-        handles=legend_handles,
-        loc="lower center",
-        bbox_to_anchor=(0.5, 0.035),
-        ncol=5,
-        fontsize=6.0,
-        handlelength=2.4,
-        columnspacing=1.2,
-    )
-    # In-image suptitle/caption text removed at author direction (2026-11-01); the
-    # full methodological description (effect-size convention, FDR families, CSF
-    # exploratory caveat, reference-standard imbalance) lives in the supplementary
-    # figure legend for S6.
-
+    figure.legend(handles=legend_handles, loc="lower center", bbox_to_anchor=(0.5, 0.0),
+                  ncol=3, fontsize=5.8, handlelength=2.2, columnspacing=1.0)
     save_figure(figure)
 
-    full_density.to_csv(
-        OUTPUT_DIR / "FigS6_Aplus_Tminus_heterogeneity_full_GMM_source.csv",
-        index=False,
-    )
+    density.to_csv(OUTPUT_DIR / "FigS5_Aplus_Tminus_heterogeneity_source.csv", index=False)
     metadata = {
         "core_conclusion": (
-            "eMTBR-tau243-defined groups delineate a cross-sectional gradient of "
-            "AD-related molecular abnormality within A+T-."
+            "Within 18 tau PET-defined A+T− patients, a two-component mixture fit "
+            "log10 eMTBR-tau243 better than a one-component model (exploratory)."
         ),
-        "archetype": "asymmetric mixed-modality quantitative figure",
         "backend": "Python/matplotlib",
-        "final_size_inches": [7.2, 2.75],
+        "final_size_inches": [3.6, 2.9],
         "source_files": [
-            str(MEMBERSHIP_PATH),
-            str(FULL_SUMMARY_PATH),
-            str(REFERENCE_SUMMARY_PATH),
-            str(REFERENCE_DENSITY_PATH),
-            str(REFERENCE_ASSIGNMENTS_PATH),
+            str(APTM_DIR / "A+T-Subgroup_membership.csv"),
+            str(APTM_DIR / "bimodality_validation_summary.csv"),
         ],
         "python": platform.python_version(),
         "numpy": np.__version__,
         "pandas": pd.__version__,
         "scipy": scipy.__version__,
         "scikit_learn": sklearn.__version__,
-        "review_risk": (
-            "Cross-sectional exploratory subgroups; no subtype, stage, or progression "
-            "inference."
-        ),
     }
-    (OUTPUT_DIR / "FigS6_Aplus_Tminus_heterogeneity_metadata.json").write_text(
+    (OUTPUT_DIR / "FigS5_Aplus_Tminus_heterogeneity_metadata.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    print(f"Figure and source data written to {OUTPUT_DIR}")
+    print(f"Figure written to {STEM}")
 
 
 if __name__ == "__main__":

@@ -41,7 +41,9 @@ from sklearn.mixture import GaussianMixture
 
 DEFAULT_INPUT = PROJECT_DIR / "biomarker_result.xlsx"
 INPUT = Path(os.environ.get("BIOMARKER_INPUT", str(DEFAULT_INPUT)))
-OUTPUT_DIR = Path(os.environ.get("BIOMARKER_OUTPUT_DIR", str(PROJECT_DIR / "outputs")))
+# SI (v3.62, 2026-11-11): combined tau PET/CSF-defined A+T− analysis (n=33), restored from the
+# pre-v3.60 code for the Supplementary Information. Statistics go to outputs/Aplus_Tminus_PET_CSF/.
+OUTPUT_DIR = Path(os.environ.get("BIOMARKER_OUTPUT_DIR", str(PROJECT_DIR / "outputs"))) / "Aplus_Tminus_PET_CSF"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 RANDOM_SEED = int(os.environ.get("BIOMARKER_RANDOM_SEED", "20261030"))

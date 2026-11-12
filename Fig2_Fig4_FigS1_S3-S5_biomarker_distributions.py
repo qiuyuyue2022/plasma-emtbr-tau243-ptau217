@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 
-DEFAULT_INPUT = Path("/Users/qiuyuyue/Documents/My-Papers/Blood biomarkers/biomarker_result.xlsx")
+DEFAULT_INPUT = SCRIPT_DIR.parent / "biomarker_result.xlsx"
 INPUT = Path(os.environ.get("BIOMARKER_INPUT", str(DEFAULT_INPUT)))
 OUTPUT_DIR = Path(os.environ.get("BIOMARKER_OUTPUT_DIR", str(SCRIPT_DIR.parent / "outputs")))
 RESULTS_FILE = OUTPUT_DIR / "biomarker_performance_results.csv"
@@ -166,7 +166,7 @@ analyses = [
     },
     {
         "analysis": "A status, non-control cohort",
-        "stem": "Fig2_distribution_A_noncontrol",  # primary A population (n=101) since v3.28
+        "stem": "Fig2_distribution_A_noncontrol",  # primary A population (patients; n=101)
         "title": "Biomarker distributions for A status",
         "subtitle": "A+ versus A−; healthy controls excluded",
         "mask": df["A"].isin(["A+", "A-"]) & df["DIAG"].ne("健康对照"),
@@ -181,52 +181,26 @@ analyses = [
         "stem": "Fig4_distribution_T_tauPET",  # main Figure 4 since 2026-11-05 (was Figure 3)
         "title": "Biomarker distributions for T status",
         "subtitle": "T+ versus T−; tau PET-defined T",
-        "mask": df["T"].isin(["T+", "T-"]) & df["taupet"].eq(1),
+        "mask": df["T"].isin(["T+", "T-"]) & df["taupet"].eq(1) & df["DIAG"].ne("健康对照"),
         "group": df["T"],
         "negative": "T-",
         "positive": "T+",
         "negative_label": "T−",
         "positive_label": "T+",
-        "expected": (68, 34, 34),  # corrected 2026-11-01: locked cohort is n=68 (34 T+/34 T-), not the earlier n=67 snapshot
-    },
-    {
-        "analysis": "T status",
-        "stem": "FigS3_distribution_T_PET_CSF",
-        "title": "Biomarker distributions for T status",
-        "subtitle": "T+ versus T−; tau PET/CSF-defined T",
-        "mask": df["T"].isin(["T+", "T-"]),
-        "group": df["T"],
-        "negative": "T-",
-        "positive": "T+",
-        "negative_label": "T−",
-        "positive_label": "T+",
-        "expected": (114, 80, 34),
+        "expected": (67, 33, 34),  # all patients
     },
     {
         "analysis": "T status, A+ subset, Tau PET only",
-        "stem": "FigS4_distribution_T_within_Aplus_tauPET",
+        "stem": "FigS3_distribution_T_within_Aplus_tauPET",  # was S4 before v3.60
         "title": "Biomarker distributions for T status",
         "subtitle": "T+ versus T−; A+ participants with tau PET-defined T",
-        "mask": df["A"].eq("A+") & df["T"].isin(["T+", "T-"]) & df["taupet"].eq(1),
+        "mask": df["A"].eq("A+") & df["T"].isin(["T+", "T-"]) & df["taupet"].eq(1) & df["DIAG"].ne("健康对照"),
         "group": df["T"],
         "negative": "T-",
         "positive": "T+",
         "negative_label": "T−",
         "positive_label": "T+",
         "expected": (52, 18, 34),
-    },
-    {
-        "analysis": "T status, A+ subset",
-        "stem": "FigS5_distribution_T_within_Aplus_PET_CSF",
-        "title": "Biomarker distributions for T status",
-        "subtitle": "T+ versus T−; A+ participants with tau PET/CSF-defined T",
-        "mask": df["A"].eq("A+") & df["T"].isin(["T+", "T-"]),
-        "group": df["T"],
-        "negative": "T-",
-        "positive": "T+",
-        "negative_label": "T−",
-        "positive_label": "T+",
-        "expected": (67, 33, 34),
     },
 ]
 

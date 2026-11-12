@@ -17,10 +17,8 @@ OUTFILE = MAIN / "TableS5_AB42_LLOQ_sensitivity.md"
 
 ANALYSES = [("A status, non-control cohort", "A, healthy controls excluded (n=101; primary)"),
             ("A status", "A, all participants (n=135)"),
-            ("T status, Tau PET subset", "T, tau PET (n=68; primary)"),
-            ("T status", "T, tau PET/CSF (n=114)"),
-            ("T status, A+ subset, Tau PET only", "T within A+, tau PET (n=52; primary)"),
-            ("T status, A+ subset", "T within A+, tau PET/CSF (n=67)")]
+            ("T status, Tau PET subset", "T, tau PET (n=67)"),
+            ("T status, A+ subset, Tau PET only", "T within A+, tau PET (n=52)")]
 NAME = {"MTBR-Tau243": "eMTBR-tau243", "MTBR-Tau243/Aβ42": "eMTBR-tau243/Aβ42", "p-Tau217": "p-tau217",
         "p-Tau217/Aβ42": "p-tau217/Aβ42", "p-Tau231/Aβ42": "p-tau231/Aβ42", "BD-Tau/Aβ42": "BD-tau/Aβ42",
         "Aβ1-42": "Aβ1-42", "NFL": "NfL", "BD Tau": "BD-tau", "p-Tau231": "p-tau231", "GFAP": "GFAP"}

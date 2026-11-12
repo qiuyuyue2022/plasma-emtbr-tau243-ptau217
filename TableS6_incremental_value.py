@@ -3,8 +3,8 @@
 
 Added 2026-11-09 in response to simulated peer review (Revision Roadmap REV-2).
 
-For each T-status population (tau PET n=68 and A+ tau PET n=52 primary;
-combined PET/CSF n=114 and A+ PET/CSF n=67 secondary) this script fits
+For each T-status population (tau PET n=67 and A+ tau PET n=52;
+patients only; v3.60 removed the combined PET/CSF populations) this script fits
 logistic regressions on log10 concentrations:
 
     M1: T ~ p-tau217
@@ -58,13 +58,11 @@ def clean_status(series: pd.Series) -> pd.Series:
 
 def populations(data: pd.DataFrame) -> list[tuple[str, str, pd.Series]]:
     a, t = clean_status(data["A"]), clean_status(data["T"])
-    pet = pd.to_numeric(data["taupet"], errors="coerce").eq(1)
+    pet = pd.to_numeric(data["taupet"], errors="coerce").eq(1) & data["DIAG"].ne("健康对照")  # v3.60: patients only
     has_t = t.isin(["T+", "T-"])
     return [
-        ("T status, tau PET (n=68; primary)", "primary", has_t & pet),
-        ("T status within A+, tau PET (n=52; primary)", "primary", has_t & pet & a.eq("A+")),
-        ("T status, tau PET/CSF (n=114; secondary)", "secondary", has_t),
-        ("T status within A+, tau PET/CSF (n=67; secondary)", "secondary", has_t & a.eq("A+")),
+        ("T status, tau PET (n=67)", "primary", has_t & pet),
+        ("T status within A+, tau PET (n=52)", "primary", has_t & pet & a.eq("A+")),
     ]
 
 
@@ -154,7 +152,7 @@ def main() -> None:
         y = clean_status(sub["T"]).eq("T+").astype(int).to_numpy()
         X = pd.DataFrame({"ptau": np.log10(sub[PTAU].to_numpy()), "mtbr": np.log10(sub[MTBR].to_numpy())})
         rows.append(analyse(name, tier, y, X, i))
-    expected = [(68, 34), (52, 34), (114, 34), (67, 34)]
+    expected = [(67, 34), (52, 34)]
     got = [(r["n"], r["T+"]) for r in rows]
     if got != expected:
         raise AssertionError(f"Unexpected population sizes {got}, expected {expected}")

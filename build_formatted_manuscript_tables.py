@@ -81,14 +81,7 @@ def table(headers: list[str], rows: list[list[str]]) -> str:
 
 def build_table1() -> str:
     original = (OUT / "Table1_participant_characteristics_draft.md").read_text(encoding="utf-8")
-    first = original.split("# Supplementary table.")[0]
-    first = first.replace("A−T0", "A−, T reference unavailable")
-    first = first.replace("  Not available (T0)", "  T reference unavailable")
-    first = first.replace("T0 indicates that no tau PET or CSF T-reference result was available.",
-                          "T reference unavailable indicates that no tau PET or eligible CSF T classification was available; it is not an AT(N) category.")
-    if "All T+ participants had tau PET" not in first:
-        first += "\n- All T+ participants had tau PET as the T reference; CSF contributed T− classifications only.\n"
-    return first
+    return original.split("# Supplementary table.")[0]
 
 
 def build_tableS3() -> str:
@@ -96,10 +89,8 @@ def build_tableS3() -> str:
     analyses = [
         ("A status, non-control cohort", "A status, healthy controls excluded (n=101; primary)"),
         ("A status", "A status, all participants (n=135)"),
-        ("T status, Tau PET subset", "T status, tau PET (n=68; primary)"),
-        ("T status", "T status, tau PET/CSF (n=114)"),
-        ("T status, A+ subset, Tau PET only", "T status within A+, tau PET (n=52; primary)"),
-        ("T status, A+ subset", "T status within A+, tau PET/CSF (n=67)"),
+        ("T status, Tau PET subset", "T status, tau PET (n=67)"),
+        ("T status, A+ subset, Tau PET only", "T status within A+, tau PET (n=52)"),
     ]
     markers = [
         ("MTBR-Tau243", "eMTBR-tau243"),
@@ -128,7 +119,7 @@ def build_tableS3() -> str:
                 f"{100*x['CV balanced accuracy']:.1f}%",
             ])
     return (
-        "# Supplementary Table S4. Full 11-marker diagnostic performance across six analysis populations\n\n"
+        "# Supplementary Table S4. Full 11-marker diagnostic performance across four analysis populations\n\n"
         + table(
             ["Analysis population", "Biomarker", "n", "Apparent AUC (95% bootstrap CI)",
              "Sample-derived Youden cutoff", "Repeated-CV accuracy", "Repeated-CV balanced accuracy"],
@@ -184,13 +175,10 @@ def _extreme_value_range(path: Path, group_col: str, group_value: str) -> str:
 
 def build_tableS4() -> str:
     pet = pd.read_csv(APTM / "bimodality_validation_summary.csv").set_index("Marker")
-    pooled = pd.read_csv(OUT / "bimodality_validation_summary.csv").set_index("Marker")
     rows = []
     for src, base, label, marker in [
-        (pet, APTM, "Tau PET-defined A+T−, eMTBR-tau243 (primary)", "MTBR-Tau243"),
-        (pet, APTM, "Tau PET-defined A+T−, p-tau217 (comparison)", "p-Tau217"),
-        (pooled, OUT, "Pooled tau PET- and CSF-defined A+T−, eMTBR-tau243 (sensitivity)", "MTBR-Tau243"),
-        (pooled, OUT, "Pooled tau PET- and CSF-defined A+T−, p-tau217 (comparison)", "p-Tau217"),
+        (pet, APTM, "eMTBR-tau243", "MTBR-Tau243"),
+        (pet, APTM, "p-tau217 (comparison)", "p-Tau217"),
     ]:
         m = src.loc[marker]
         rows.append([
@@ -200,22 +188,13 @@ def build_tableS4() -> str:
             f"{fmt(m['LOO minimum delta BIC'], 2)} to {fmt(m['LOO maximum delta BIC'], 2)}",
             _extreme_value_range(base / "bimodality_extreme_value_sensitivity.csv", "Marker", marker),
         ])
-    ref = pd.read_csv(OUT / "GMM_reference_stratified_summary.csv").set_index("Reference stratum")
-    m = ref.loc["CSF-defined T-negative"]
-    rows.append([
-        "CSF-defined A+T−, eMTBR-tau243 (descriptive)", str(int(m["N"])), str(int(m["Observed low n"])),
-        str(int(m["Observed high n"])), fmt(m["Observed delta BIC"], 2), pfmt(m["Parametric-bootstrap LRT p"]),
-        fmt(m["Observed decision boundary"], 3),
-        f"{fmt(m['LOO minimum delta BIC'], 2)} to {fmt(m['LOO maximum delta BIC'], 2)}",
-        _extreme_value_range(OUT / "GMM_reference_stratified_extreme_sensitivity.csv", "Reference stratum", "CSF-defined T-negative"),
-    ])
     stability = pd.read_csv(APTM / "MTBR_subgroup_assignment_stability.csv")
     low = stability.loc[stability["Observed subgroup"] == "Low MTBR-Tau243", "Parametric-bootstrap high-assignment frequency"]
     high = stability.loc[stability["Observed subgroup"] == "High MTBR-Tau243", "Parametric-bootstrap high-assignment frequency"]
     return (
-        "# Supplementary Table S7. Gaussian-mixture-model diagnostics and sensitivity analyses for eMTBR-tau243 within A+T−\n\n"
+        "# Supplementary Table S7. Gaussian-mixture-model diagnostics for eMTBR-tau243 within tau PET-defined A+T− (n=18)\n\n"
         + table(
-            ["Model", "N", "Low n", "High n", "ΔBIC (2 vs 1 component)", "Parametric-bootstrap LRT p",
+            ["Marker", "N", "Low n", "High n", "ΔBIC (2 vs 1 component)", "Parametric-bootstrap LRT p",
              "Decision boundary (pg/mL)", "Leave-one-out ΔBIC range", "Extreme-value ΔBIC range"],
             rows,
         )
@@ -237,10 +216,8 @@ def build_tableS4() -> str:
 S2_ANALYSES = [  # (analysis key in CSV, display label) in Results order, primary first
     ("A status, non-control cohort", "A status, healthy controls excluded (n=101; primary)"),
     ("A status", "A status, all participants (n=135)"),
-    ("T status, Tau PET subset", "T status, tau PET (n=68; primary)"),
-    ("T status", "T status, tau PET/CSF (n=114)"),
-    ("T status, A+ subset, Tau PET only", "T status within A+, tau PET (n=52; primary)"),
-    ("T status, A+ subset", "T status within A+, tau PET/CSF (n=67)"),
+    ("T status, Tau PET subset", "T status, tau PET (n=67)"),
+    ("T status, A+ subset, Tau PET only", "T status within A+, tau PET (n=52)"),
 ]
 S2_DISPLAY = {
     "MTBR-Tau243": "eMTBR-tau243", "MTBR-Tau243/Aβ42": "eMTBR-tau243/Aβ42",

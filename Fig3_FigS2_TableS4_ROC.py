@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 
-DEFAULT_INPUT = Path("/Users/qiuyuyue/Documents/My-Papers/Blood biomarkers/biomarker_result.xlsx")
+DEFAULT_INPUT = SCRIPT_DIR.parent / "biomarker_result.xlsx"
 INPUT = Path(os.environ.get("BIOMARKER_INPUT", str(DEFAULT_INPUT)))
 WORK_DIR = SCRIPT_DIR
 OUTPUT_DIR = Path(os.environ.get("BIOMARKER_OUTPUT_DIR", str(SCRIPT_DIR.parent / "outputs")))
@@ -31,6 +31,11 @@ mpl.rcParams.update({
     "legend.frameon": False,
     "xtick.major.width": 0.8,
     "ytick.major.width": 0.8,
+    # Keep mathtext (e.g. the AUC^DeLong legend title) in the body font.
+    "mathtext.fontset": "custom",
+    "mathtext.rm": "sans",
+    "mathtext.it": "sans:italic",
+    "mathtext.bf": "sans:bold",
 })
 
 LABELS = {
@@ -242,50 +247,46 @@ outcomes = [
         "y": A_y,
     },
     {
-        "analysis": "T status",
-        "title": "T+ versus T−",
-        "subtitle": "PET/CSF defined T",
-        "mask": df["T"].isin(["T+", "T-"]),
-        "y": T_y,
-    },
-    {
         "analysis": "T status, Tau PET subset",
         "title": "T+ versus T−",
         "subtitle": "PET defined T",
-        "mask": df["T"].isin(["T+", "T-"]) & df["taupet"].eq(1),
-        "y": T_y,
-    },
-    {
-        "analysis": "T status, A+ subset",
-        "title": "T+ versus T−",
-        "subtitle": "A+ participants, PET/CSF defined T",
-        "mask": df["A"].eq("A+") & df["T"].isin(["T+", "T-"]),
+        "mask": df["T"].isin(["T+", "T-"]) & df["taupet"].eq(1) & df["DIAG"].ne("健康对照"),
         "y": T_y,
     },
     {
         "analysis": "T status, A+ subset, Tau PET only",
         "title": "T+ versus T−",
         "subtitle": "A+ participants, PET defined T",
-        "mask": df["A"].eq("A+") & df["T"].isin(["T+", "T-"]) & df["taupet"].eq(1),
+        "mask": df["A"].eq("A+") & df["T"].isin(["T+", "T-"]) & df["taupet"].eq(1) & df["DIAG"].ne("健康对照"),
         "y": T_y,
     },
 ]
 
+# v3.60 (2026-11-11): the combined tau PET/CSF T analyses were removed.
+# T analyses are restricted to patients (no healthy control had tau PET).
+# Seed indices keep the original six-outcome positions so that unchanged analyses
+# reproduce their earlier bootstrap/CV results exactly.
+SEED_INDEX = {
+    "A status": 0,
+    "A status, non-control cohort": 1,
+    "T status, Tau PET subset": 3,
+    "T status, A+ subset, Tau PET only": 5,
+}
+
 # Preserve the original computation order (and therefore the established random
 # seeds and numerical results), but use the manuscript narrative order for plots:
-# A non-control (primary, n=101; v3.28) -> A overall -> primary tau PET T -> operational PET/CSF T -> A+ T.
+# A non-control (primary, patients; n=101) -> A overall -> primary tau PET T -> operational PET/CSF T -> A+ T.
 PLOT_ANALYSIS_ORDER = [
     "A status, non-control cohort",
     "A status",
     "T status, Tau PET subset",
-    "T status",
     "T status, A+ subset, Tau PET only",
-    "T status, A+ subset",
 ]
 
 rows = []
 roc_data = {}
-for outcome_idx, outcome in enumerate(outcomes):
+for outcome in outcomes:
+    outcome_idx = SEED_INDEX[outcome["analysis"]]
     mask = outcome["mask"]
     y_all = outcome["y"][mask].to_numpy(dtype=int)
     outcome["n"] = int(len(y_all))
@@ -368,21 +369,47 @@ plot_outcomes = [
     next(outcome for outcome in outcomes if outcome["analysis"] == analysis)
     for analysis in PLOT_ANALYSIS_ORDER
 ]
-fig = plt.figure(figsize=(9.6, 5.7))
-grid = fig.add_gridspec(2, 3, left=0.065, right=0.99, bottom=0.09, top=0.91, hspace=0.50, wspace=0.25)
-axes = [fig.add_subplot(grid[row, col]) for row in range(2) for col in range(3)]
-panel_letters = ["a", "b", "c", "d", "e", "f"]
+# Legend annotation (Supplementary Table S2, leading-measure screening): the
+# best-performing measure in each analysis is marked "(Ref.)"; every other
+# measure carries stars from its paired DeLong test versus the reference,
+# BH-FDR q over the ten comparisons (* q<0.05, ** q<0.01, *** q<0.001).
+# Source: best_vs_others_AUC_comparisons.csv written by TableS2_diagnostic_validation.py.
+_CMP_PATH = OUTPUT_DIR / "best_vs_others_AUC_comparisons.csv"
+_cmp = pd.read_csv(_CMP_PATH)
+_Q_COL = "DeLong FDR q (10 comparisons within analysis)"
+
+
+def _stars(q):
+    return "***" if q < 0.001 else "**" if q < 0.01 else "*" if q < 0.05 else ""
+
+
+REF_MARKER = {a: g["Best marker"].iloc[0] for a, g in _cmp.groupby("Analysis")}
+STARS = {(r["Analysis"], r["Other marker"]): _stars(r[_Q_COL]) for _, r in _cmp.iterrows()}
+
+fig = plt.figure(figsize=(6.6, 6.0))
+grid = fig.add_gridspec(2, 2, left=0.09, right=0.99, bottom=0.08, top=0.93, hspace=0.42, wspace=0.25)
+axes = [fig.add_subplot(grid[row, col]) for row in range(2) for col in range(2)]
+panel_letters = ["a", "b", "c", "d"]
 for ax, outcome, letter in zip(axes, plot_outcomes, panel_letters):
     subset = results[results["Analysis"] == outcome["analysis"]].set_index("Biomarker")
+    legend_entries = []  # (AUC, line): legend is listed by AUC, highest first
     for marker in ORDER:
         curve = roc_data[outcome["analysis"]][marker]
         auc = subset.loc[marker, "AUC"]
-        ax.plot(
+        if marker == REF_MARKER[outcome["analysis"]]:
+            tag = " (Ref.)"
+        else:
+            s = STARS[(outcome["analysis"], marker)]
+            # Plain-text stars (the asterisk glyph already sits high); mathtext
+            # superscripts made legend row spacing uneven.
+            tag = f" {s}" if s else ""
+        (line,) = ax.plot(
             curve["fpr"], curve["tpr"],
             color=COLORS[marker], linestyle=LINESTYLES[marker],
             linewidth=1.6 if marker in {"MTBR-Tau243/Aβ42", "p-Tau217/Aβ42", "MTBR-Tau243", "p-Tau217"} else 1.15,
-            alpha=0.98, label=f"{DISPLAY_OVERRIDE.get(marker, marker)}  {auc:.3f}",
+            alpha=0.98, label=f"{DISPLAY_OVERRIDE.get(marker, marker)}  {auc:.3f}{tag}",
         )
+        legend_entries.append((auc, line))
     ax.plot([0, 1], [0, 1], color="#B8B8B8", linewidth=0.8, linestyle=(0, (3, 3)), zorder=0)
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -393,21 +420,22 @@ for ax, outcome, letter in zip(axes, plot_outcomes, panel_letters):
     # population and n for each lettered panel are described in the Figure 3 legend
     # in manuscript/full_manuscript_v1.md.
     ax.text(-0.17, 1.15, letter, transform=ax.transAxes, fontsize=9, fontweight="bold", va="top")
-    ax.legend(title="Biomarker   AUC", title_fontsize=5.2, fontsize=4.75, loc="lower right", handlelength=2.3, labelspacing=0.20)
+    legend_entries.sort(key=lambda item: item[0], reverse=True)
+    ax.legend(handles=[line for _, line in legend_entries],
+              title=r"Biomarker   AUC$^{\mathrm{DeLong}}$", title_fontsize=5.2, fontsize=4.75, loc="lower right", handlelength=2.3, labelspacing=0.20)
     ax.tick_params(labelsize=6.0, length=3)
 axes[0].set_ylabel("Sensitivity", fontsize=7)
-axes[3].set_ylabel("Sensitivity", fontsize=7)
+axes[2].set_ylabel("Sensitivity", fontsize=7)
+axes[2].set_xlabel("1 − specificity", fontsize=7)
 axes[3].set_xlabel("1 − specificity", fontsize=7)
-axes[4].set_xlabel("1 − specificity", fontsize=7)
-axes[5].set_xlabel("1 − specificity", fontsize=7)
 save_figure(fig, "Fig3_full_ROC_11marker")  # main Figure 3 since 2026-11-05 (was Figure 4)
 
 
 # Supplementary Figure S2 (renumbered 2026-11-01 from S5, to match true first-citation
 # order -- see changelog 3.11): matching six-panel AUC forest summary.
-fig = plt.figure(figsize=(9.6, 5.9))
-grid = fig.add_gridspec(2, 3, left=0.12, right=0.99, bottom=0.09, top=0.91, hspace=0.48, wspace=0.32)
-axes = [fig.add_subplot(grid[row, col]) for row in range(2) for col in range(3)]
+fig = plt.figure(figsize=(6.6, 6.0))
+grid = fig.add_gridspec(2, 2, left=0.17, right=0.99, bottom=0.08, top=0.93, hspace=0.40, wspace=0.12)
+axes = [fig.add_subplot(grid[row, col]) for row in range(2) for col in range(2)]
 for ax, outcome, letter in zip(axes, plot_outcomes, panel_letters):
     subset = results[results["Analysis"] == outcome["analysis"]].set_index("Biomarker").loc[ORDER]
     y_positions = np.arange(len(ORDER))[::-1]
@@ -428,7 +456,7 @@ for ax, outcome, letter in zip(axes, plot_outcomes, panel_letters):
     # labels only on the left-most panel prevents long labels from colliding
     # with the adjacent confidence intervals in the three-panel lower row.
     ax.set_yticklabels(
-        [DISPLAY_OVERRIDE.get(m, m) for m in ORDER] if letter in {"a", "d"} else [],
+        [DISPLAY_OVERRIDE.get(m, m) for m in ORDER] if letter in {"a", "c"} else [],
         fontsize=6.4,
     )
     ax.set_xlabel("AUC (95% CI)", fontsize=7)

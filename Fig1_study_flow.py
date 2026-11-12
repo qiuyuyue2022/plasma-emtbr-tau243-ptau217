@@ -104,6 +104,14 @@ def count_data():
         "a_plus_tau_pet": int((a_plus & tau_pet).sum()),
         "a_plus_tau_pet_tminus": int((a_plus & tau_pet & t_minus).sum()),
         "a_plus_csf_tminus": int((a_plus & ~tau_pet & t_minus).sum()),
+        # v3.60: T status is defined by tau PET in patients only.
+        "pt_tau_pet_n": int((~health & tau_pet & t_available).sum()),
+        "pt_tau_pet_plus": int((~health & tau_pet & data["T"].eq("T+")).sum()),
+        "pt_tau_pet_minus": int((~health & tau_pet & t_minus).sum()),
+        "pt_no_tau_pet": int((~health & ~(tau_pet & t_available)).sum()),
+        "pt_a_minus_tminus": int((~health & tau_pet & data["A"].eq("A-") & t_minus).sum()),
+        "pt_a_plus_tminus": int((~health & tau_pet & a_plus & t_minus).sum()),
+        "pt_a_plus_tplus": int((~health & tau_pet & a_plus & data["T"].eq("T+")).sum()),
         "patient_a_pet": int((~health & data["A_level"].eq("PET")).sum()),
         "patient_a_csf": int((~health & data["A_level"].eq("CSF")).sum()),
         "control_a_pet": int((health & data["A_level"].eq("PET")).sum()),
@@ -113,30 +121,25 @@ def count_data():
 
     expected = {
         "included": 135, "memory_clinic": 101, "healthy_controls": 34,
-        "a_plus": 67, "a_minus": 68, "t_available": 114,
-        "t_plus": 34, "t_minus": 80, "t0": 21,
-        "t0_a_plus": 0, "t0_a_minus": 21,
-        "tau_pet_n": 68, "tau_pet_plus": 34, "tau_pet_minus": 34,
-        "csf_defined_tminus": 46, "a_minus_tminus": 47,
+        "a_plus": 67, "a_minus": 68, "t_available": 113,
+        "t_plus": 34, "t_minus": 79, "t0": 22,
+        "t0_a_plus": 0, "t0_a_minus": 22,
+        "tau_pet_n": 67, "tau_pet_plus": 34, "tau_pet_minus": 33,
+        "csf_defined_tminus": 46, "a_minus_tminus": 46,
         "a_plus_tminus": 33, "a_plus_tplus": 34,
         "a_plus_tau_pet": 52, "a_plus_tau_pet_tminus": 18,
         "a_plus_csf_tminus": 15,
         "patient_a_pet": 91, "patient_a_csf": 10,
         "control_a_pet": 15, "control_a_csf": 7, "control_a_plasma": 12,
+        "pt_tau_pet_n": 67, "pt_tau_pet_plus": 34, "pt_tau_pet_minus": 33,
+        "pt_no_tau_pet": 34, "pt_a_minus_tminus": 15, "pt_a_plus_tminus": 18,
+        "pt_a_plus_tplus": 34,
     }
     drift = {key: (counts[key], value) for key, value in expected.items()
              if counts[key] != value}
     if drift:
         raise AssertionError(f"Locked cohort counts changed: {drift}")
 
-    gmm = pd.read_csv(OUTPUT / "bimodality_validation_summary.csv")
-    mtbr = gmm.loc[gmm["Marker"].eq("MTBR-Tau243")]
-    if len(mtbr) != 1:
-        raise AssertionError("Expected one locked MTBR-Tau243 GMM row")
-    counts["mtbr_low"] = int(mtbr.iloc[0]["Observed low n"])
-    counts["mtbr_high"] = int(mtbr.iloc[0]["Observed high n"])
-    if (counts["mtbr_low"], counts["mtbr_high"]) != (12, 21):
-        raise AssertionError("Locked full-sample eMTBR group sizes changed")
     return counts
 
 
@@ -190,27 +193,28 @@ def draw(counts):
              detail=f'A+ {counts["a_plus"]}  |  A− {counts["a_minus"]}', lw=1.0)
     line(ax, (main_cx, row2_y), (main_cx, 0.455))
 
-    # Branch point: continue down the spine to T-status assessment, and
-    # branch right to the participants excluded from T-status analyses.
+    # Branch point (v3.60): T status is defined by tau PET in patients only. Healthy
+    # controls and patients without tau PET branch right (A-status and descriptive
+    # analyses only); patients with tau PET continue down the spine.
     branch_y = 0.455
     excl_x, excl_w = main_x + main_w + 0.07, 1.0 - (main_x + main_w + 0.07) - 0.02
-    excl_cy = 0.41
+    excl_cy = 0.385
     line(ax, (main_cx, branch_y), (main_cx, 0.43))
     line(ax, (main_cx, 0.43), (excl_x + excl_w / 2, 0.43),
-         (excl_x + excl_w / 2, excl_cy + 0.0475))
-    flow_box(ax, excl_x, excl_cy, excl_w, 0.095,
-             "T status unavailable", counts["t0"])
+         (excl_x + excl_w / 2, excl_cy + 0.12))
+    flow_box(ax, excl_x, excl_cy, excl_w, 0.12,
+             "No tau PET-defined T", counts["healthy_controls"] + counts["pt_no_tau_pet"],
+             detail=f'HC {counts["healthy_controls"]}  |  Patients {counts["pt_no_tau_pet"]}')
     line(ax, (main_cx, 0.43), (main_cx, 0.39))
 
-    # Row 3: T-status available, continuing the main spine. Same unified
-    # "T reference: … | …" form as the A-reference lines above.
+    # Row 3: patients with tau PET-defined T status (T-status population).
     row3_y = 0.255
-    flow_box(ax, main_x, row3_y, main_w, 0.135, "T status available",
-             counts["t_available"],
-             detail=f'T reference: PET {counts["tau_pet_n"]} | CSF {counts["csf_defined_tminus"]}',
+    flow_box(ax, main_x, row3_y, main_w, 0.135, "Patients with tau PET",
+             counts["pt_tau_pet_n"],
+             detail=f'T+ {counts["pt_tau_pet_plus"]}  |  T− {counts["pt_tau_pet_minus"]}',
              lw=1.0)
 
-    # Row 4: the three A/T groups, outer edges aligned with the main spine.
+    # Row 4: the three tau PET-defined A/T groups, outer edges aligned with the spine.
     split_y = row3_y
     line(ax, (main_cx, split_y), (main_cx, 0.205))
     group_y = 0.045
@@ -220,9 +224,9 @@ def draw(counts):
         line(ax, (gx + group_w / 2, 0.205), (gx + group_w / 2, group_y + 0.085))
     line(ax, (xs[0] + group_w / 2, 0.205), (xs[2] + group_w / 2, 0.205))
     for x, label, n in [
-        (xs[0], "A−T−", counts["a_minus_tminus"]),
-        (xs[1], "A+T−", counts["a_plus_tminus"]),
-        (xs[2], "A+T+", counts["a_plus_tplus"]),
+        (xs[0], "A−T−", counts["pt_a_minus_tminus"]),
+        (xs[1], "A+T−", counts["pt_a_plus_tminus"]),
+        (xs[2], "A+T+", counts["pt_a_plus_tplus"]),
     ]:
         flow_box(ax, x, group_y, group_w, 0.085, label, n)
 
@@ -244,18 +248,13 @@ def export_source_data(counts):
         ("Included cohort", "Final included cohort", counts["included"]),
         ("A status", "A+", counts["a_plus"]),
         ("A status", "A−", counts["a_minus"]),
-        ("T status", "T+", counts["t_plus"]),
-        ("T status", "T−", counts["t_minus"]),
-        ("T status", "T0 (unavailable)", counts["t0"]),
-        ("T reference", "Tau PET", counts["tau_pet_n"]),
-        ("T reference", "CSF-defined T−", counts["csf_defined_tminus"]),
-        ("AT group", "A−T−", counts["a_minus_tminus"]),
-        ("AT group", "A+T−", counts["a_plus_tminus"]),
-        ("AT group", "A+T+", counts["a_plus_tplus"]),
-        ("A+T− reference stratum", "Tau PET-confirmed T−", counts["a_plus_tau_pet_tminus"]),
-        ("A+T− reference stratum", "CSF-defined T−", counts["a_plus_csf_tminus"]),
-        ("A+T− eMTBR component", "Low", counts["mtbr_low"]),
-        ("A+T− eMTBR component", "High", counts["mtbr_high"]),
+        ("No tau PET-defined T", "Healthy controls", counts["healthy_controls"]),
+        ("No tau PET-defined T", "Patients without tau PET", counts["pt_no_tau_pet"]),
+        ("Patients with tau PET", "T+", counts["pt_tau_pet_plus"]),
+        ("Patients with tau PET", "T−", counts["pt_tau_pet_minus"]),
+        ("Tau PET-defined A/T group", "A−T−", counts["pt_a_minus_tminus"]),
+        ("Tau PET-defined A/T group", "A+T−", counts["pt_a_plus_tminus"]),
+        ("Tau PET-defined A/T group", "A+T+", counts["pt_a_plus_tplus"]),
     ]
     pd.DataFrame(rows, columns=["Section", "Population", "N"]).to_csv(
         OUTPUT / "Fig1_study_flow_SourceData.csv", index=False)

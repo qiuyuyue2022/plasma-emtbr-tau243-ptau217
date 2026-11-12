@@ -1,8 +1,8 @@
 """Assemble the Supporting Information file from the current outputs.
 
 Inputs:
-  outputs/TableS1_*.md ... outputs/TableS8_*.md            supplementary tables (generated or hand-built)
-  outputs/FigS1_*.png ... outputs/FigS6_*.png              supplementary figures
+  outputs/TableS1_*.md ... outputs/TableS9_*.md            supplementary tables (generated or hand-built)
+  outputs/FigS1_*.png ... outputs/FigS7_*.png              supplementary figures
   manuscript/ars/phase4_drafting/supplementary_figure_legends_v1.md   figure titles and legends
   manuscript/full_manuscript_v1.md                         title (first line)
 
@@ -31,14 +31,16 @@ TABLES = [
     "TableS6_incremental_value.md",  # 2026-11-09 revision
     "TableS7_GMM_sensitivity_analyses.md",
     "TableS8_Aplus_Tminus_groups.md",  # tau PET-defined A+T- (n=18); CSF table removed
+    "TableS9_PETCSF_Aplus_Tminus.md",  # v3.62: combined tau PET/CSF A+T- (n=33), restored
 ]
 FIGURES = [
     "FigS1_distribution_A_all.png",
     "FigS2_full_AUC_forest_11marker.png",
-    "FigS3_distribution_T_PET_CSF.png",
-    "FigS4_distribution_T_within_Aplus_tauPET.png",
-    "FigS5_distribution_T_within_Aplus_PET_CSF.png",
-    "FigS6_Aplus_Tminus_heterogeneity.png",
+    "FigS3_distribution_T_within_Aplus_tauPET.png",  # was S4 before v3.60
+    "FigS4_AT_3group_PET_CSF.png",  # v3.61: combined tau PET/CSF A/T groups (restored)
+    "FigS5_Aplus_Tminus_heterogeneity.png",  # S6 before v3.60; S4 in v3.60
+    "FigS6_PETCSF_Aplus_Tminus_bimodality.png",  # v3.62: combined tau PET/CSF A+T- mixture models (restored)
+    "FigS7_PETCSF_Aplus_Tminus_subgroup_boxplots.png",  # v3.62: combined tau PET/CSF A+T- subgroup profiles (restored)
 ]
 
 

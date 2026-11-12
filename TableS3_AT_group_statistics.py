@@ -24,7 +24,7 @@ import pandas as pd
 from scipy.stats import mannwhitneyu
 
 
-DEFAULT_INPUT = Path("/Users/qiuyuyue/Documents/My-Papers/Blood biomarkers/biomarker_result.xlsx")
+DEFAULT_INPUT = SCRIPT_DIR.parent / "biomarker_result.xlsx"
 INPUT = Path(os.environ.get("BIOMARKER_INPUT", str(DEFAULT_INPUT)))
 OUTPUT_DIR = Path(os.environ.get("BIOMARKER_OUTPUT_DIR", str(PROJECT_DIR / "outputs")))
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -83,19 +83,19 @@ PANEL_ORDER = [
 GROUPS = [
     {
         "key": "A−T−",
-        "mask": lambda data: data["A"].eq("A-") & data["T"].eq("T-"),
+        "mask": lambda data: data["A"].eq("A-") & data["T"].eq("T-") & data["taupet"].eq(1) & data["DIAG"].ne("健康对照"),
         "color": "#4C78A8",
         "linestyle": "-",
     },
     {
         "key": "A+T−",
-        "mask": lambda data: data["A"].eq("A+") & data["T"].eq("T-"),
+        "mask": lambda data: data["A"].eq("A+") & data["T"].eq("T-") & data["taupet"].eq(1) & data["DIAG"].ne("健康对照"),
         "color": "#E69F00",
         "linestyle": (0, (5, 2)),
     },
     {
         "key": "A+T+",
-        "mask": lambda data: data["A"].eq("A+") & data["T"].eq("T+"),
+        "mask": lambda data: data["A"].eq("A+") & data["T"].eq("T+") & data["taupet"].eq(1) & data["DIAG"].ne("健康对照"),
         "color": "#C23B53",
         "linestyle": (0, (5, 1.5, 1.2, 1.5)),
     },

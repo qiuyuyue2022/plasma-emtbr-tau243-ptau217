@@ -5,3 +5,4 @@ __pycache__/
 _vendor/
 *.pyc
 .env
+_obsolete/

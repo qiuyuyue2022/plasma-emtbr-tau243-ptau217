@@ -25,18 +25,22 @@ INPUT = ROOT / "biomarker_result.xlsx"
 OUTPUT_DIR = ROOT / "outputs"
 
 
-GROUP_ORDER = ["Overall", "A−T−", "A+T−", "A+T+", "A−, T reference unavailable"]
+# v3.60 (2026-11-11): T is defined by tau PET only, in patients only. Columns are the
+# tau PET-defined A/T groups of patients, patients without tau PET, and healthy controls.
+GROUP_ORDER = ["Overall", "A−T−", "A+T−", "A+T+", "Patients without tau PET", "Healthy controls"]
 
 
 def assign_group(row: pd.Series) -> str:
+    if row["DIAG"] == "健康对照":
+        return "Healthy controls"
+    if row["taupet"] != 1 or row["T"] not in ("T+", "T-"):
+        return "Patients without tau PET"
     if row["A"] == "A-" and row["T"] == "T-":
         return "A−T−"
     if row["A"] == "A+" and row["T"] == "T-":
         return "A+T−"
     if row["A"] == "A+" and row["T"] == "T+":
         return "A+T+"
-    if row["A"] == "A-" and row["T"] == "T0":
-        return "A−, T reference unavailable"
     raise ValueError(f"Unexpected A/T combination: A={row['A']!r}, T={row['T']!r}")
 
 
@@ -113,14 +117,11 @@ def build_characteristics(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     add("APOE ε4 carrier", lambda d: fmt_n_over_n_pct(d["APOE4_carrier"]))
     add("MMSE score", lambda d: fmt_median_iqr_n(d["MMSE_Total"], 1))
     add("MoCA-P score", lambda d: fmt_median_iqr_n(d["MOCA_P"], 1))
+    add("Amyloid positive", lambda d: fmt_n_pct(d["A"].eq("A+"), len(d)))
     rows.append(["A reference"] + [""] * len(GROUP_ORDER))
     add("  PET", lambda d: fmt_n_pct(d["A_level"].eq("PET"), len(d)))
     add("  CSF", lambda d: fmt_n_pct(d["A_level"].eq("CSF"), len(d)))
     add("  Plasma", lambda d: fmt_n_pct(d["A_level"].eq("Plasma"), len(d)))
-    rows.append(["T reference"] + [""] * len(GROUP_ORDER))
-    add("  Tau PET", lambda d: fmt_n_pct(d["T_reference"].eq("Tau PET"), len(d)))
-    add("  CSF", lambda d: fmt_n_pct(d["T_reference"].eq("CSF"), len(d)))
-    add("  T reference unavailable", lambda d: fmt_n_pct(d["T_reference"].eq("Not available"), len(d)))
 
     out = pd.DataFrame(rows, columns=columns)
     metadata = {
@@ -134,9 +135,8 @@ def build_characteristics(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
             "Values are mean (SD), median [IQR], or n (%) unless otherwise indicated.",
             "APOE ε4 carriage is shown as n/N (%) because genotype was unavailable for some participants.",
             "A reference indicates the method by which amyloid status was established: PET or CSF for patients; PET, CSF, or (when neither was available) a plasma p-tau217 reference assay on the LUMIPULSE platform for healthy controls (Methods 2.2). This plasma reference assay is analytically distinct from the plasma p-tau217 measured on the Inspirer DX platform evaluated as a candidate biomarker in this study.",
-            "T reference unavailable indicates that no tau PET or eligible CSF T classification was available.",
-            "The A−, T reference unavailable column is descriptive and is not included in the three-group A/T distribution analyses.",
-            "All T+ participants had tau PET as the T reference; CSF contributed T− classifications only.",
+            "A−T−, A+T−, and A+T+ are patients with tau PET; T status was defined by tau PET only. These 67 patients form the T-status population and the three groups of the two-step comparison.",
+            "Patients without tau PET and healthy controls contributed to A-status and descriptive analyses only.",
         ],
     }
     return out, metadata
@@ -209,7 +209,7 @@ def main() -> None:
     )
 
     md = [
-        "# Table 1. Participant characteristics by A/T group",
+        "# Table 1. Participant characteristics by tau PET-defined A/T group",
         "",
         markdown_table(table1),
         "",
@@ -231,31 +231,33 @@ def main() -> None:
         "\n".join(md) + "\n", encoding="utf-8"
     )
 
-    # Add the A+T+ vs A+T− Mann-Whitney comparison (computed by TableS3_AT_group_statistics.py;
-    # FDR family of 11 measures) for the seven absolute biomarkers. No statistic is recomputed here.
+    # Amyloid-step and tau-step comparisons for the seven absolute biomarkers, read from
+    # AT_two_step_comparison.csv (Fig5_AT_two_step_comparison.py; BH-FDR across the seven
+    # markers within each step). No statistic is recomputed here.
     s3 = biomarkers.copy()
-    stats_path = OUTPUT_DIR / "TableS3_AT_group_statistics.csv"
-    stats_note = ""
-    if stats_path.exists():
-        st = pd.read_csv(stats_path)
-        name_map = {"MTBR-Tau243": "eMTBR-tau243", "p-Tau217": "p-tau217", "p-Tau231": "p-tau231",
-                    "BD Tau": "BD-tau", "GFAP": "GFAP", "NFL": "NfL", "Aβ1-42": "Aβ1-42"}
-        st["Biomarker"] = st["Biomarker"].map(name_map)
-        st = st.dropna(subset=["Biomarker"]).set_index("Biomarker")
-        rcol = "Rank-biserial r (positive means higher in A+T+)"
-        qcol = "FDR q (11 biomarkers)"
-        s3["A+T+ vs A+T−, rank-biserial r"] = s3["Biomarker"].map(lambda b: f"{st.loc[b, rcol]:.2f}")
-        s3["A+T+ vs A+T−, FDR q"] = s3["Biomarker"].map(
-            lambda b: "<0.001" if st.loc[b, qcol] < 0.001 else f"{st.loc[b, qcol]:.3f}")
-        stats_note = (" A+T+ and A+T− were compared with Mann–Whitney U tests; positive rank-biserial r indicates "
-                      "higher concentrations in A+T+, and q values are Benjamini–Hochberg-corrected across the 11 "
-                      "measures shown in Figure 5 (the four Aβ42-normalized ratios are reported there).")
+    stats_path = OUTPUT_DIR / "AT_two_step_comparison.csv"
+    st = pd.read_csv(stats_path).set_index("Marker")
+    name_map = {"NfL": "NfL"}
+    def qfmt(q):
+        return "<0.001" if q < 0.001 else f"{q:.3f}"
+    for step, rcol, qcol in [("Amyloid step", "Amyloid step r (A+T− vs A−T−)", "Amyloid step q"),
+                             ("Tau step", "Tau step r (A+T+ vs A+T−)", "Tau step q")]:
+        s3[f"{step}, r"] = s3["Biomarker"].map(lambda b: f"{st.loc[name_map.get(b, b), rcol]:.2f}")
+        s3[f"{step}, q"] = s3["Biomarker"].map(lambda b: qfmt(st.loc[name_map.get(b, b), qcol]))
+    gn = metadata["group_n"]
+    stats_note = (" The amyloid step compares A+T− with A−T−, and the tau step compares A+T+ with A+T−, "
+                  "among patients with tau PET-defined T status (Mann–Whitney U tests; positive rank-biserial r "
+                  "indicates higher concentrations in the later group; Benjamini–Hochberg q across the seven "
+                  "markers within each step; same statistics as Figure 5).")
     tables2_md = [
-        "# Supplementary Table S3. Plasma biomarker concentrations by A/T group",
+        "# Supplementary Table S3. Plasma biomarker concentrations by tau PET-defined A/T group",
         "",
         markdown_table(s3),
         "",
-        "Values are median [interquartile range] of absolute plasma concentrations by A/T group (Overall, n=135; A−T−, n=47; A+T−, n=33; A+T+, n=34; A−, T reference unavailable, n=21). All concentrations are in pg/mL." + stats_note,
+        (f"Values are median [interquartile range] of absolute plasma concentrations (Overall, n={gn['Overall']}; "
+         f"tau PET-defined A−T−, n={gn['A−T−']}; A+T−, n={gn['A+T−']}; A+T+, n={gn['A+T+']}; "
+         f"patients without tau PET, n={gn['Patients without tau PET']}; healthy controls, n={gn['Healthy controls']}). "
+         "All concentrations are in pg/mL." + stats_note),
     ]
     (OUTPUT_DIR / "TableS3_biomarkers_by_AT_group.md").write_text(
         "\n".join(tables2_md) + "\n", encoding="utf-8"

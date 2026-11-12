@@ -46,8 +46,7 @@ except ImportError as error:
 
 DEFAULT_INPUT = PROJECT_DIR / "biomarker_result.xlsx"
 INPUT = Path(os.environ.get("BIOMARKER_INPUT", str(DEFAULT_INPUT)))
-OUTPUT_DIR = Path(os.environ.get("BIOMARKER_OUTPUT_DIR", str(PROJECT_DIR / "outputs")))
-APTM_REFERENCE = os.environ.get("BIOMARKER_APTM_REFERENCE", "all")  # "tauPET" = n=18 (2026-11-09)
+OUTPUT_DIR = Path(os.environ.get("BIOMARKER_OUTPUT_DIR", str(PROJECT_DIR / "outputs" / "Aplus_Tminus_tauPET_only")))  # v3.60: n=18 only
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 RANDOM_SEED = int(os.environ.get("BIOMARKER_RANDOM_SEED", "20261029"))
@@ -79,8 +78,7 @@ def prepare_subset() -> pd.DataFrame:
         raise KeyError(f"Required columns are missing: {missing}")
 
     mask = clean_status(data["A"]).eq("A+") & clean_status(data["T"]).eq("T-")
-    if APTM_REFERENCE == "tauPET":  # 2026-11-09 revision: tau PET-defined A+T- only (n=18)
-        mask &= pd.to_numeric(data["taupet"], errors="coerce").eq(1)
+    mask &= pd.to_numeric(data["taupet"], errors="coerce").eq(1)  # tau PET-defined T- only
     subset = data.loc[mask, list(MARKERS.values())].copy()
     for column in MARKERS.values():
         subset[column] = pd.to_numeric(subset[column], errors="coerce")
@@ -88,7 +86,7 @@ def prepare_subset() -> pd.DataFrame:
         raise ValueError("Missing marker values were found in A+T- participants.")
     if (subset <= 0).any().any():
         raise ValueError("Non-positive marker values cannot be log10 transformed.")
-    if len(subset) != (18 if APTM_REFERENCE == "tauPET" else 33):
+    if len(subset) != 18:
         raise ValueError(f"Expected 33 A+T- participants but found {len(subset)}.")
     return subset.reset_index(drop=True)
 

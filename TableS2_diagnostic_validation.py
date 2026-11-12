@@ -200,28 +200,32 @@ def prepare_data(path: Path) -> tuple[pd.DataFrame, list[dict[str, object]]]:
             "outcome": "A_outcome",
         },
         {
-            "analysis": "T status",
-            "mask": data["T_clean"].isin(["T+", "T-"]),
-            "outcome": "T_outcome",
-        },
-        {
             "analysis": "T status, Tau PET subset",
-            "mask": data["T_clean"].isin(["T+", "T-"]) & pd.to_numeric(data["taupet"], errors="coerce").eq(1),
-            "outcome": "T_outcome",
-        },
-        {
-            "analysis": "T status, A+ subset",
-            "mask": data["A_clean"].eq("A+") & data["T_clean"].isin(["T+", "T-"]),
+            "mask": data["T_clean"].isin(["T+", "T-"])
+            & pd.to_numeric(data["taupet"], errors="coerce").eq(1)
+            & data["DIAG"].ne("健康对照"),
             "outcome": "T_outcome",
         },
         {
             "analysis": "T status, A+ subset, Tau PET only",
             "mask": data["A_clean"].eq("A+")
             & data["T_clean"].isin(["T+", "T-"])
-            & pd.to_numeric(data["taupet"], errors="coerce").eq(1),
+            & pd.to_numeric(data["taupet"], errors="coerce").eq(1)
+            & data["DIAG"].ne("健康对照"),
             "outcome": "T_outcome",
         },
     ]
+    # v3.60 (2026-11-11): combined tau PET/CSF T analyses removed; T analyses restricted to
+    # patients. Seed indices keep the original six-outcome
+    # positions so unchanged analyses reproduce exactly.
+    seed_index = {
+        "A status": 0,
+        "A status, non-control cohort": 1,
+        "T status, Tau PET subset": 3,
+        "T status, A+ subset, Tau PET only": 5,
+    }
+    for outcome in outcomes:
+        outcome["seed_index"] = seed_index[outcome["analysis"]]
     _ap_tau = outcomes[-1]
     _ap_mask = _ap_tau["mask"]
     _ap_pos = int(data.loc[_ap_mask, _ap_tau["outcome"]].sum())
@@ -402,7 +406,8 @@ def cv_analysis(data: pd.DataFrame, outcomes: list[dict[str, object]]) -> tuple[
     performance_rows = []
     cutoff_rows = []
     biomarkers = BASE_BIOMARKERS + list(RATIO_NUMERATORS)
-    for outcome_index, outcome in enumerate(outcomes):
+    for outcome in outcomes:
+        outcome_index = outcome["seed_index"]
         for marker_index, marker in enumerate(biomarkers):
             y, values = get_marker_data(data, outcome, marker)
             apparent = optimal_metrics(y, values)
@@ -461,7 +466,8 @@ def cv_analysis(data: pd.DataFrame, outcomes: list[dict[str, object]]) -> tuple[
 
 def pairwise_analysis(data: pd.DataFrame, outcomes: list[dict[str, object]]) -> pd.DataFrame:
     rows = []
-    for outcome_index, outcome in enumerate(outcomes):
+    for outcome in outcomes:
+        outcome_index = outcome["seed_index"]
         for pair_index, (marker_1, marker_2, comparison_name) in enumerate(COMPARISON_PAIRS):
             local = outcome["mask"] & data[marker_1].notna() & data[marker_2].notna()
             y = data.loc[local, outcome["outcome"]].to_numpy(dtype=int)
@@ -518,7 +524,8 @@ def best_vs_others_analysis(
     analysis across these ten comparisons, separately from the four
     prespecified-comparison FDR correction above."""
     rows = []
-    for outcome_index, outcome in enumerate(outcomes):
+    for outcome in outcomes:
+        outcome_index = outcome["seed_index"]
         analysis_name = outcome["analysis"]
         analysis_cv = cv_results[cv_results["Analysis"] == analysis_name]
         best_row = analysis_cv.loc[analysis_cv["Apparent AUC"].idxmax()]

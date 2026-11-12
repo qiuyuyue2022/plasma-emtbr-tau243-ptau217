@@ -73,12 +73,10 @@ diagnostic_expectations = [
     ("A status", "MTBR-Tau243/Aβ42", 135, 0.9023266023, 0.845485, 0.950158),
     ("A status", "MTBR-Tau243", 135, 0.8985952590, 0.838271, 0.950287),
     ("A status, non-control cohort", "MTBR-Tau243/Aβ42", 101, 0.8937664618, 0.828203, 0.947193),
-    ("T status, Tau PET subset", "MTBR-Tau243", 68, 0.9602076125, 0.908844, 0.995641),
-    ("T status, Tau PET subset", "p-Tau217", 68, 0.9480968858, 0.887719, 0.989475),
-    ("T status", "MTBR-Tau243", 114, 0.9430147059, 0.886790, 0.984192),
-    ("T status", "p-Tau217", 114, 0.9341911765, 0.879983, 0.976615),
-    ("T status, A+ subset", "MTBR-Tau243", 67, 0.8894830659, 0.803111, 0.959905),
-    ("T status, A+ subset", "p-Tau217", 67, 0.8716577540, 0.775635, 0.946856),
+    ("A status, non-control cohort", "MTBR-Tau243", 101, 0.8913520632, 0.824572, 0.946760),
+    ("A status, non-control cohort", "p-Tau217", 101, 0.8604038630, 0.783331, 0.925266),
+    ("T status, Tau PET subset", "MTBR-Tau243", 67, 0.9590017825, 0.907206, 0.996396),
+    ("T status, Tau PET subset", "p-Tau217", 67, 0.9474153298, 0.886604, 0.990483),
 ]
 for analysis, marker, n, auc, lower, upper in diagnostic_expectations:
     r = row(performance, Analysis=analysis, Biomarker=marker)
@@ -91,11 +89,8 @@ for analysis, marker, n, auc, lower, upper in diagnostic_expectations:
 cv_path = OUTPUT / "diagnostic_cv_performance.csv"
 cv = pd.read_csv(cv_path)
 for analysis, marker, expected in [
-    ("T status, Tau PET subset", "MTBR-Tau243", 0.9604353741),
-    ("T status, Tau PET subset", "p-Tau217", 0.9491972789),
-    ("T status", "MTBR-Tau243", 0.9437678571),
-    ("T status", "p-Tau217", 0.9352678571),
-    ("T status, A+ subset", "MTBR-Tau243", 0.8897142857),
+    ("T status, Tau PET subset", "MTBR-Tau243", 0.9606122449),
+    ("T status, Tau PET subset", "p-Tau217", 0.9497142857),
 ]:
     r = row(cv, Analysis=analysis, Biomarker=marker)
     numeric_check("Cross-validation", f"{analysis}: {marker}, CV AUC", r["CV Auc mean"], expected, cv_path.name, 5e-6)
@@ -116,18 +111,6 @@ for marker, auc, lower, upper in [
     numeric_check("A+ tau PET-only (n=52)", f"{marker}, CI upper", r["AUC 95% CI upper"], upper, performance_path.name, 5e-6)
 
 # Distributional heterogeneity ----------------------------------------------
-gmm_path = OUTPUT / "bimodality_validation_summary.csv"
-gmm = pd.read_csv(gmm_path)
-r = row(gmm, Marker="MTBR-Tau243")
-for column, expected in [
-    ("N", 33), ("Observed delta BIC", 21.3784657462),
-    ("Observed low n", 12), ("Observed high n", 21),
-    ("Observed decision boundary", 2.2652404247),
-    ("LOO minimum delta BIC", 19.5004502626),
-    ("LOO maximum delta BIC", 24.8974148597),
-]:
-    numeric_check("Pooled A+T− GMM (sensitivity)", column, r[column], expected, gmm_path.name)
-
 # 2026-11-09 revision (Stage 4, REV-15): primary A+T- analysis = tau PET-defined T- (n=18),
 # computed by 02a/02c/03 with BIOMARKER_APTM_REFERENCE=tauPET into outputs/Aplus_Tminus_tauPET_only/.
 APTM = OUTPUT / "Aplus_Tminus_tauPET_only"
@@ -151,12 +134,6 @@ for marker, dip_p, silv_p in [("eMTBR-tau243", 0.00199, 0.0019996001), ("p-tau21
     numeric_check("Unimodality tests (n=18)", f"{marker}: dip p", r["Hartigan dip bootstrap p"], dip_p, "Aplus_Tminus_tauPET_only/unimodality_test_results.csv", 5e-6)
     numeric_check("Unimodality tests (n=18)", f"{marker}: Silverman p", r["Silverman bootstrap p"], silv_p, "Aplus_Tminus_tauPET_only/unimodality_test_results.csv", 5e-6)
 
-reference_path = OUTPUT / "GMM_reference_stratified_summary.csv"
-reference = pd.read_csv(reference_path)
-r = row(reference, **{"Reference stratum": "CSF-defined T-negative"})
-for column, expected in [("N", 15), ("Observed delta BIC", 5.5251427292), ("Parametric-bootstrap LRT p", 0.0869130869)]:
-    numeric_check("CSF-defined A+T− GMM (descriptive)", column, r[column], expected, reference_path.name)
-
 plasma_path = APTM / "A+T-Subgroup_biomarkers.csv"
 plasma = pd.read_csv(plasma_path)
 for marker, effect, q in [
@@ -170,10 +147,8 @@ for marker, effect, q in [
 inc_path = OUTPUT / "incremental_value_ptau217_MTBR.csv"
 inc = pd.read_csv(inc_path)
 for analysis, p_add_mtbr, p_add_ptau, cv_both in [
-    ("T status, tau PET (n=68; primary)", 0.497903, 0.126054, 0.929135),
-    ("T status within A+, tau PET (n=52; primary)", 0.729118, 0.170016, 0.888137),
-    ("T status, tau PET/CSF (n=114; secondary)", 0.295687, 0.080336, 0.924971),
-    ("T status within A+, tau PET/CSF (n=67; secondary)", 0.674911, 0.068093, 0.857433),
+    ("T status, tau PET (n=67)", 0.530507, 0.123057, 0.927255),
+    ("T status within A+, tau PET (n=52)", 0.729118, 0.170016, 0.888137),
 ]:
     r = row(inc, analysis=analysis)
     numeric_check("Incremental value", f"{analysis}: LRT p adding MTBR", r["LRT_add_MTBR_to_ptau217_p"], p_add_mtbr, inc_path.name, 5e-6)
@@ -187,39 +162,65 @@ numeric_check("A+ tau PET-only (n=52)", "MTBR-Tau243, CV accuracy (Results 3.4: 
 two_path = OUTPUT / "AT_two_step_comparison.csv"
 two = pd.read_csv(two_path)
 for marker, r_a, q_a, r_t, q_t, auc in [
-    ("eMTBR-tau243", 0.5729166667, None, 0.8823529412, None, 0.7864583333),
-    ("p-tau217", 0.3333333333, None, 0.8398692810, None, 0.6666666667),
-    ("GFAP", 0.5972222222, None, 0.0816993464, None, 0.7986111111),
-    ("BD-tau", 0.1944444444, None, 0.7549019608, None, 0.5972222222),
+    ("eMTBR-tau243", 0.5444444444, None, 0.8823529412, None, 0.7722222222),
+    ("p-tau217", 0.3481481481, None, 0.8398692810, None, 0.6740740741),
+    ("GFAP", 0.5777777778, None, 0.0816993464, None, 0.7888888889),
+    ("BD-tau", 0.1851851852, None, 0.7549019608, None, 0.5925925926),
 ]:
     r = row(two, Marker=marker)
     numeric_check("Two-step A/T", f"{marker}: amyloid-step r", r["Amyloid step r (A+T− vs A−T−)"], r_a, two_path.name, 5e-3)
     numeric_check("Two-step A/T", f"{marker}: tau-step r", r["Tau step r (A+T+ vs A+T−)"], r_t, two_path.name, 5e-3)
     numeric_check("Two-step A/T", f"{marker}: T− A-status AUC", r["T− A-status AUC"], auc, two_path.name, 5e-4)
 
-# Age-adjusted amyloid step (code/Text_age_adjusted_amyloid_step.py), 2026-11-09
-age_path = OUTPUT / "age_adjusted_amyloid_step.csv"
-age = pd.read_csv(age_path)
-for marker, lrt in [("eMTBR-tau243", 0.039), ("GFAP", 0.134), ("p-tau217", 0.141)]:
-    r = row(age, Marker=marker)
-    numeric_check("Age-adjusted amyloid step", f"{marker}: LRT p over age", round(r["LRT p over age"], 3), lrt, age_path.name, 1e-9)
+# Combined tau PET/CSF three-group figure (Supplementary Figure S4; code/FigS4_AT_3group_PET_CSF.py), v3.61
+s4_path = OUTPUT / "FigS4_AT_3group_PET_CSF_statistics.csv"
+s4 = pd.read_csv(s4_path)
+for marker, n_neg, r_tau in [("MTBR-Tau243", 46, 0.778966), ("p-Tau217", 46, 0.743316), ("BD Tau", 46, 0.732620)]:
+    r = row(s4, Biomarker=marker)
+    numeric_check("PET/CSF three groups", f"{marker}: A−T− n", r["A−T− n"], n_neg, s4_path.name)
+    numeric_check("PET/CSF three groups", f"{marker}: A+T+ vs A+T− r", r["Rank-biserial r (positive means higher in A+T+)"], r_tau, s4_path.name, 5e-6)
+
+# Combined tau PET/CSF-defined A+T− (n=33; Supplementary Figures S6-S7, Table S9; code/SI_PETCSF_*.py), v3.62
+pc = OUTPUT / "Aplus_Tminus_PET_CSF"
+bv = pd.read_csv(pc / "bimodality_validation_summary.csv")
+r = row(bv, Marker="MTBR-Tau243")
+numeric_check("PET/CSF A+T−", "eMTBR-tau243 GMM N", r["N"], 33, "bimodality_validation_summary.csv")
+numeric_check("PET/CSF A+T−", "eMTBR-tau243 low n", r["Observed low n"], 12, "bimodality_validation_summary.csv")
+numeric_check("PET/CSF A+T−", "eMTBR-tau243 high n", r["Observed high n"], 21, "bimodality_validation_summary.csv")
+numeric_check("PET/CSF A+T−", "eMTBR-tau243 ΔBIC", round(r["Observed delta BIC"], 2), 21.38, "bimodality_validation_summary.csv", 1e-9)
+numeric_check("PET/CSF A+T−", "eMTBR-tau243 bootstrap p <0.001", r["Parametric-bootstrap LRT p under 1-component null"] < 0.001, True, "bimodality_validation_summary.csv")
+un = pd.read_csv(pc / "unimodality_test_results.csv")
+r = row(un, **{"Source column": "MTBR-Tau243"})
+numeric_check("PET/CSF A+T−", "dip p", round(r["Hartigan dip bootstrap p"], 3), 0.026, "unimodality_test_results.csv", 1e-9)
+numeric_check("PET/CSF A+T−", "Silverman p", round(r["Silverman bootstrap p"], 3), 0.026, "unimodality_test_results.csv", 1e-9)
+st = pd.read_csv(pc / "GMM_reference_stratified_summary.csv")
+r = row(st, **{"Reference stratum": "CSF-defined T-negative"})
+numeric_check("PET/CSF A+T−", "CSF-defined stratum ΔBIC", round(r["Observed delta BIC"], 2), 5.53, "GMM_reference_stratified_summary.csv", 1e-9)
+numeric_check("PET/CSF A+T−", "CSF-defined stratum p", round(r["Parametric-bootstrap LRT p"], 3), 0.087, "GMM_reference_stratified_summary.csv", 1e-9)
+cs = pd.read_csv(pc / "A+T-_CSF_Lumipulse_comparison.csv")
+for var, q in [("CSF p-tau181/Aβ42", 0.022), ("CSF t-tau/Aβ42", 0.035)]:
+    r = row(cs, Variable=var)
+    numeric_check("PET/CSF A+T−", f"{var} q", round(r["FDR q (evaluable CSF comparisons)"], 3), q, "A+T-_CSF_Lumipulse_comparison.csv", 1e-9)
 
 # Manuscript rendering checks: key values must be present in the manuscript prose itself
 # (2026-11-09: no longer also searched in the outline, which had let removed values pass).
 docs = [MANUSCRIPT]
 for item, pattern in [
-    ("Primary tau PET AUCs", r"0\.960 \(95% CI, 0\.909[–-]0\.996.*p-tau217 \(AUC 0\.948 \[0\.888[–-]0\.989\]"),
-    ("Operational PET/CSF AUCs", r"0\.943 \[95% CI, 0\.887[–-]0\.984\].*0\.934 \[0\.880[–-]0\.977\]"),
+    ("Primary tau PET AUCs", r"0\.959 \(95% CI, 0\.907[–-]0\.996.*p-tau217 \(AUC 0\.947 \[0\.887[–-]0\.990\]"),
+    ("Primary A-status AUC (n=101)", r"analysis of 101 patients, eMTBR-tau243/Aβ42 had the highest observed AUC \(0\.894; 95% CI, 0\.828[–-]0\.947"),
+    ("Cohort composition", r"\(101 patients, 34 healthy controls\)"),
+    ("A−T− 95th percentile", r"8 \(44%\) exceeded the 95th percentile of the tau PET-defined A−T− group \(4\.18 pg/mL\)"),
     ("A+ tau PET CV accuracy", r"Cross-validated accuracy was 84\.7%"),
     ("Tau PET-defined GMM", r"ΔBIC=16\.16; parametric-bootstrap p=0\.003"),
-    ("Pooled GMM", r"ΔBIC=21\.38; p<0\.001"),
-    ("Unimodality n=18", r"dip and Silverman tests both rejected unimodality \(p=0\.002 for each\).*dip test did not reject unimodality \(p=0\.170\), whereas the Silverman test did \(p=0\.037\)"),
-    ("Plasma profile n=18", r"p-tau217 \(median 0\.976.*q=0\.001; rank-biserial r=1\.00\) and p-tau231.*q=0\.001; r=1\.00\)"),
-    ("Incremental value", r"adding eMTBR-tau243 to p-tau217: likelihood-ratio p=0\.50 and 0\.73"),
-    ("Two-step results", r"eMTBR-tau243 changed at both steps.*amyloid step r=0\.57, q=0\.016; tau step r=0\.88, q<0\.001"),
-    ("T− A-status AUC", r"AUC of 0\.786 \(95% CI, 0\.619–0\.925\)"),
-    ("Age-adjusted", r"eMTBR-tau243 remained associated with A status \(likelihood-ratio p=0\.039 over age alone\), whereas GFAP \(p=0\.134\) and p-tau217 \(p=0\.141\) did not"),
-    ("A−T− tau PET n", r"A−T− \(n=16\), A\+T− \(n=18\), and A\+T\+ \(n=34\) participants, all classified by tau PET"),
+    ("Unimodality n=18", r"dip and Silverman tests also rejected unimodality \(p=0\.002 for each\)[\s\S]*dip test did not reject unimodality \(p=0\.170\), although the Silverman test did \(p=0\.037"),
+    ("Plasma profile n=18", r"For p-tau217, medians were 0\.976 .*for p-tau231, they were 6\.70 .*\(both q=0\.001; r=1\.00\)"),
+    ("Incremental value", r"adding eMTBR-tau243 to p-tau217: likelihood-ratio p=0\.53 and 0\.73"),
+    ("Two-step results", r"eMTBR-tau243 changed at both steps.*amyloid step r=0\.54, q=0\.029; tau step r=0\.88, q<0\.001"),
+    ("T− A-status AUC", r"AUC of 0\.772 \(95% CI, 0\.599–0\.917\)"),
+    ("PET/CSF three groups", r"A−T−, n=46, including 12 healthy controls; A\+T−, n=33; A\+T\+, n=34\).*r=0\.78, 0\.74, and 0\.73; all q<0\.001; Supplementary Figure S4"),
+    ("PET/CSF A+T− GMM", r"two components were also favored \(12 low and 21 high; ΔBIC=21\.38; p<0\.001\), and the dip and Silverman tests rejected unimodality \(both p=0\.026\).*ΔBIC=5\.53; p=0\.087; Supplementary Figure S6\)"),
+    ("PET/CSF A+T− profiles", r"higher CSF p-tau181/Aβ42 \(q=0\.022\) and t-tau/Aβ42 \(q=0\.035\).*Supplementary Figure S7; Supplementary Table S9"),
+    ("A−T− tau PET n", r"A−T− \(n=15\), A\+T− \(n=18\), and A\+T\+ \(n=34\) participants, all classified by tau PET"),
 ]:
     text_check("Manuscript text", item, pattern, docs)
 
